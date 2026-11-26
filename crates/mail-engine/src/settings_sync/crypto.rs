@@ -158,6 +158,10 @@ pub enum OpenError {
     /// From a newer app version (format or kind unknown here); left on the server.
     #[error("written by a newer app version: {0}")]
     Unsupported(String),
+    /// Of a kind this version retired ([`super::record::RETIRED_KINDS`], decision 0072):
+    /// ignored without a notice to the user, left on the server for older versions.
+    #[error("a record of the retired kind {0:?}")]
+    Retired(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -302,6 +306,9 @@ impl SyncKey {
         }
         if envelope.version != header.version {
             return Err(OpenError::HeaderMismatch("version"));
+        }
+        if RecordKind::is_retired(&envelope.kind) {
+            return Err(OpenError::Retired(envelope.kind));
         }
         let kind = RecordKind::from_name(&envelope.kind)
             .ok_or_else(|| OpenError::Unsupported(format!("record kind {:?}", envelope.kind)))?;
@@ -596,6 +603,16 @@ mod tests {
             key.open(&header, &kind),
             Err(OpenError::Unsupported(_))
         ));
+        // Stage 22 (decision 0072): a contact picture of an older version is retired, whatever
+        // its content.
+        let picture = seal(json!({
+            "format": 1, "opaqueId": header.opaque_id.as_str(), "version": v(5),
+            "kind": "contactPicture", "id": "ada@example.org", "content": { "jpeg": "/9j/4A==" }
+        }));
+        assert_eq!(
+            key.open(&header, &picture),
+            Err(OpenError::Retired("contactPicture".to_owned()))
+        );
         let secret = seal(json!({
             "format": 1, "opaqueId": header.opaque_id.as_str(), "version": v(5),
             "kind": "identity", "id": "00000000-0000-0000-0000-000000000001",

@@ -350,9 +350,10 @@ function SkeletonRows({ label }: { label: string }) {
         {label}
       </p>
       {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} aria-hidden className="flex h-(--ui-row-height) items-center gap-3 ps-(--ui-row-lead) pe-3">
-          <span className="size-(--ui-avatar) shrink-0 rounded-full bg-badge" />
-          <span className="h-3 w-(--ui-list-sender-width) shrink-0 rounded-full bg-badge" />
+        <div key={i} aria-hidden className="flex h-(--ui-row-height) items-center gap-2 ps-(--ui-row-lead) pe-3">
+          {/* The mark column stays empty, so the bars start where the senders will. */}
+          <span className="w-(--ui-row-mark) shrink-0" />
+          <span className="me-1 h-3 w-(--ui-list-sender-width) shrink-0 rounded-full bg-badge" />
           <span className="h-3 flex-1 rounded-full bg-hover" />
         </div>
       ))}
@@ -1401,7 +1402,7 @@ export function MessageList({
                       key={virtualItem.key}
                       {...common}
                       role="presentation"
-                      className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-3 ps-(--ui-row-lead) pe-3"
+                      className="absolute top-0 left-0 flex h-(--ui-row-height) w-full items-center gap-2 ps-(--ui-row-lead) pe-3"
                     >
                       <LoaderCircle aria-hidden className="size-(--ui-icon-small) text-tertiary" strokeWidth={1.75} />
                       <span className="text-13 text-tertiary">{t("list.loadingMore")}</span>

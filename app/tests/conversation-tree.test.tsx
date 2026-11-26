@@ -398,7 +398,7 @@ describe("the look (stage 17, after the screenshot pass)", () => {
   });
 
   for (const width of [1000, 400]) {
-    it(`the line leaves from under the conversation's avatar (${width === 400 ? "narrow" : "wide"} list)`, async () => {
+    it(`the line leaves from under the conversation's mark (${width === 400 ? "narrow" : "wide"} list)`, async () => {
       // The list measures its width through a ResizeObserver: report one at once.
       vi.stubGlobal(
         "ResizeObserver",
@@ -422,13 +422,23 @@ describe("the look (stage 17, after the screenshot pass)", () => {
       // Narrow rows have the subject on a line of their own.
       expect(conversation().querySelector(".flex-col") !== null).toBe(width === 400);
       const line = within(conversation()).getByTestId("tree-line");
-      // From the row's middle (inside the avatar) to its bottom, under the avatar, which is
-      // positioned after it and so covers its start.
-      expect(classes(line)).toEqual(expect.arrayContaining(["absolute", "top-1/2", "bottom-0", "start-(--ui-tree-line-start)", "border-dotted"]));
-      // Stage 21: the avatar's mark (avatar, selection box and unread dot) is the positioned box.
-      const avatar = within(conversation()).getByTestId("avatar").closest("[data-row-check]");
-      expect(classes(avatar)).toContain("relative");
-      expect(line.compareDocumentPosition(avatar as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Stage 22 (decision 0072): no avatar. From the mark (unread dot, selection box) down to the
+      // row's bottom: wide, the mark is in the row's middle; narrow, on the first line, so the line
+      // starts there inside a box from the content's top to the row's bottom (grid rows 2 to 3).
+      if (width === 400) {
+        expect(classes(line)).toEqual(
+          expect.arrayContaining(["absolute", "top-[calc(var(--ui-space-5)/2)]", "bottom-0", "start-[calc(var(--ui-row-mark)/2)]", "border-dotted"]),
+        );
+        expect(classes(line.parentElement)).toEqual(expect.arrayContaining(["relative", "row-start-2", "row-end-4"]));
+      } else {
+        expect(classes(line)).toEqual(expect.arrayContaining(["absolute", "top-1/2", "bottom-0", "start-(--ui-tree-line-start)", "border-dotted"]));
+      }
+      // The mark is positioned after the line, so it covers the line's start.
+      const mark = within(conversation()).getByTestId("row-mark");
+      expect(classes(mark)).toContain("relative");
+      expect(mark.hasAttribute("data-row-check")).toBe(true);
+      expect(line.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(conversation()).queryByTestId("avatar")).toBeNull();
       // On through every message, ending in the middle of the last.
       const lines = children().map((child) => classes(within(child).getByTestId("tree-line")));
       expect(lines.map((c) => [c.includes("top-0"), c.includes("bottom-0"), c.includes("h-1/2")])).toEqual([
@@ -469,7 +479,8 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
       expect(classes(actions)).not.toContain("absolute");
       expect(classes(actions)).toEqual(expect.arrayContaining(["hidden", "group-hover/row:flex", "shrink-0"]));
       const line = actions.parentElement as HTMLElement;
-      expect(line).toBe(within(conversation()).getByTestId("row-sender").parentElement);
+      // Stage 22: the sender's text sits in its column (with the account's dot in mixed lists).
+      expect(line).toBe(within(conversation()).getByTestId("row-sender").parentElement?.parentElement);
       expect(meta.parentElement).toBe(line);
       expect(meta.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(within(meta).getByRole("time", { hidden: true })).toBeTruthy();
@@ -521,8 +532,9 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     });
   }
 
-  it("lists that mix accounts have them too: account label and time give way like the rest of the meta", async () => {
-    // Stage 21 (decision 0065, replaces 0052 point 5).
+  it("lists that mix accounts have them too: the time gives way like the rest of the meta, the account label stays", async () => {
+    // Stage 21 (decision 0065, replaces 0052 point 5). Stage 22 (decision 0072): the account label
+    // carries what the avatar's ring did, so it stays before the actions.
     const work = makeAccount({ id: "33333333-3333-4333-8333-333333333333", email: "work@example.com", displayName: "Work" });
     setup({ accounts: [ADA, work] });
     act(() => {
@@ -532,9 +544,14 @@ describe("quick actions beside the replies toggle (stage 18, decision 0052)", ()
     const rows = await within(list).findAllByRole("treeitem");
     for (const row of rows) {
       const meta = within(row).getByTestId("row-meta");
-      expect(meta.contains(within(row).getByTestId("row-account"))).toBe(true);
+      const label = within(row).getByTestId("row-account");
+      expect(meta.contains(label)).toBe(false);
+      expect(within(row).getByTestId("row-meta-marks").contains(label)).toBe(false);
+      expect(classes(label)).not.toContain("group-hover/row:hidden");
       const actions = await within(row).findByTestId("row-actions");
       expect(actions.parentElement).toBe(meta.parentElement);
+      expect(label.parentElement).toBe(meta.parentElement);
+      expect(label.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(classes(meta)).toEqual(expect.arrayContaining(["contents", "group-hover/row:hidden"]));
       expect(within(actions).getByTestId("quick-archive")).toBeTruthy();
     }

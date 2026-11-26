@@ -4,6 +4,8 @@ import { Button } from "../../components/Button";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { toCoreError } from "../../services/ipc";
 import { useExportDiagnostics } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 /**
  * Stage 15, part of Settings → About: "Export diagnostics…" with what the file holds and what it
@@ -23,11 +25,14 @@ export function DiagnosticsPanel() {
   };
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="diagnostics-panel">
-      <h3 id={headingId} className="text-14 font-semibold text-primary">
-        {t("settings.about.diagnostics.title")}
-      </h3>
-      <p className="text-14 text-secondary">{t("settings.about.diagnostics.intro")}</p>
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="diagnostics-panel" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search with its first sentence. */}
+      <div {...settingAnchor(t("settings.about.diagnostics.title"))} className={cx("flex flex-col gap-3", SETTING_ANCHOR_CLASS)}>
+        <h3 id={headingId} className="text-14 font-semibold text-primary">
+          {t("settings.about.diagnostics.title")}
+        </h3>
+        <p className="text-14 text-secondary">{t("settings.about.diagnostics.intro")}</p>
+      </div>
       <p id={containsId} className="text-14 text-secondary">
         {t("settings.about.diagnostics.contains")}
       </p>

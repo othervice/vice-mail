@@ -34,9 +34,6 @@ pub struct NewMailContent {
     /// The start of the text as plain text (the list preview, at most 256 characters); null
     /// until the body is stored (the core fills it in as soon as the prefetch has it).
     pub snippet: Option<String>,
-    /// Stage 17 (decision 0050): the picture the user chose for the sender, as the JPEG
-    /// `data:` URL the core's helper wrote; null without one. Never from the network.
-    pub picture: Option<String>,
 }
 
 /// The account of a card, named only when the app has more than one account.
@@ -120,7 +117,6 @@ mod tests {
                     sender_email: Some("bob@example.org".into()),
                     subject: "Lunch".into(),
                     snippet: None,
-                    picture: None,
                 }),
                 account: None,
                 writes_enabled: false,
@@ -141,7 +137,7 @@ mod tests {
                     "accountId": "6f9619ff-8b86-4d11-b42d-00c04fc964ff",
                     "mailboxId": 3, "messageId": 42, "date": 1_764_000_000_000_i64,
                     "content": { "senderName": "Bob", "senderEmail": "bob@example.org",
-                                 "subject": "Lunch", "snippet": null, "picture": null },
+                                 "subject": "Lunch", "snippet": null },
                     "account": null, "writesEnabled": false, "deleted": false
                 }],
                 "more": 2,

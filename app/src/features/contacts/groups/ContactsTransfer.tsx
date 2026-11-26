@@ -110,7 +110,6 @@ export function ContactsTransfer({ contact, group }: ContactsTransferProps) {
                   created: report.created,
                   updated: report.updated,
                   lists: report.lists,
-                  pictures: report.pictures,
                 })}
               </p>
               {report.problems.length > 0 && <p>{t("contactGroups.transfer.problems", { count: report.problems.length })}</p>}

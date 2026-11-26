@@ -2,13 +2,14 @@ import { ArrowLeft, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/Button";
+import { cx } from "../../../components/cx";
 import { ErrorNotice } from "../../../components/ErrorNotice";
 import { Notice } from "../../../components/Notice";
 import { Switch } from "../../../components/Switch";
 import { TextField } from "../../../components/TextField";
 import type { Account, ServerSettings } from "../../../services/ipc";
 import { useUiStore } from "../../../stores/ui";
-import { Avatar } from "../../accounts/Avatar";
+import { accountFill } from "../../accounts/accountColor";
 import { useAccounts, useRemoveAccount, useRetryAccount, useUpdatePassword } from "../../accounts/queries";
 import { useSetWritesEnabled } from "../../actions/queries";
 import { useSendSettings } from "../../composer/queries";
@@ -351,7 +352,10 @@ export function AccountDetail({ accountId }: { accountId: string }) {
     <section aria-labelledby="account-title" className="flex max-w-(--ui-content-max-width) flex-col gap-6" data-testid="account-detail">
       {back}
       <div className="flex items-center gap-3">
-        <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
+        {/* Stage 22 (decision 0072): the account's colour as a dot at its name, no initials. */}
+        <span className="flex h-(--ui-line-height-20) shrink-0 items-center self-start">
+          <span aria-hidden className={cx("size-3 rounded-full", accountFill(account.color))} data-testid="account-dot" />
+        </span>
         <div className="flex min-w-0 flex-col">
           <h2 id="account-title" className="truncate text-20 font-semibold text-primary">
             {account.displayName || account.email}

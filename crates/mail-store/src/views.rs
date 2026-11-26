@@ -157,9 +157,7 @@ fn row_conditions(
         out.push(format!(
             "EXISTS (SELECT 1 FROM contact c WHERE c.address_key = {m}.sender_key
                        AND (c.sent > 0 OR c.user_name IS NOT NULL OR c.note IS NOT NULL
-                            OR c.contact_group IS NOT NULL
-                            OR EXISTS (SELECT 1 FROM contact_picture cp
-                                       WHERE cp.address_key = c.address_key)))"
+                            OR c.contact_group IS NOT NULL))"
         ));
     }
     out.iter().map(|c| format!(" AND {c}")).collect()

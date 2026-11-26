@@ -24,6 +24,8 @@ import {
   useSettingsSyncStatus,
   useSyncSettingsNow,
 } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 const MAX_DEVICE_NAME_CHARS = 64;
 
@@ -39,8 +41,9 @@ function Block({
   "data-testid"?: string;
 }) {
   return (
-    <section className="flex flex-col gap-3 border-t border-border pt-6" data-testid={rest["data-testid"]}>
-      <div className="flex flex-col gap-1">
+    <section className="flex flex-col gap-3 border-t border-border pt-6" data-testid={rest["data-testid"]} {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search with its description. */}
+      <div {...settingAnchor(title)} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 className="text-14 font-semibold text-primary">{title}</h3>
         {description && <p className="text-13 text-secondary">{description}</p>}
       </div>

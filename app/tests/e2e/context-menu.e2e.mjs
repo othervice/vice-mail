@@ -9,8 +9,10 @@
 // 3. In "All inboxes" (alice and bob, bob read-only) hovering a row shows its quick actions, with
 //    its own account: alice's enabled, bob's disabled with the reason; bob's menu shows Delete
 //    disabled with the reason (dark theme).
-// 4. The rows have no empty column left of the avatar: the avatar starts at the row's lead, the
-//    unread dot sits before it, the selection box only shows on hover.
+// 4. Stage 22 (decision 0072): the rows have no avatar; the narrow mark column starts at the row's
+//    lead with the unread dot, the sender 8 px after it, the selection box only on hover, in the
+//    dot's place; in "All inboxes" the account's label (dot and name) stays on hover, before the
+//    quick actions.
 // 5. No CSP violation.
 //
 // Sets up its own accounts (alice writable, bob read-only) and removes them at the end; appends
@@ -96,10 +98,15 @@ const rowFacts = (subject) =>
       row: box(option),
       content: box(option.querySelector("[data-context-target], .rounded-row")),
       contentRing: option.querySelector("[data-context-target]") !== null,
-      avatar: box(option.querySelector('[data-testid="avatar"]')),
+      avatar: option.querySelector('[data-testid="avatar"]') !== null,
+      mark: box(option.querySelector('[data-testid="row-mark"]')),
       dot: box(option.querySelector('[data-testid="row-unread-dot"]')),
+      dotShown: option.querySelector('[data-testid="row-unread-dot"]') ? getComputedStyle(option.querySelector('[data-testid="row-unread-dot"]')).display !== "none" : null,
       checkShown: check ? getComputedStyle(check).display !== "none" : null,
-      avatarHidden: option.querySelector('[data-testid="row-avatar"]') ? getComputedStyle(option.querySelector('[data-testid="row-avatar"]')).visibility === "hidden" : null,
+      checkBox: box(check),
+      senderBox: box(option.querySelector('[data-testid="row-sender"]')),
+      accountDot: box(option.querySelector('[data-testid="row-account-dot"]')),
+      actionsBox: box(actions),
       sender: option.querySelector('[data-testid="row-sender"]') ? getComputedStyle(option.querySelector('[data-testid="row-sender"]')).fontWeight : null,
       hovered: option.matches(":hover"),
       actionsShown: actions ? getComputedStyle(actions).display !== "none" : false,
@@ -282,24 +289,29 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     report.steps.deleted = { trash, inInbox: 0 };
   });
 
-  it("has no empty column left of the avatar; the dot sits before it, the box shows on hover", async () => {
+  it("starts the rows with the narrow mark column: the dot in it, the box in its place on hover", async () => {
     await mouse("move", { x: 2, y: 2 });
     const facts = await scrollToRow(`${MARK} one`);
     const scale = await browser.execute(() => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16);
-    const lead = facts.avatar.left - facts.content.left;
-    report.steps.rows = { lead, scale, facts };
-    assert.ok(lead >= 15 * scale && lead <= 17 * scale, `the avatar starts ${String(lead)} px into the row`);
+    const lead = facts.mark.left - facts.content.left;
+    const toSender = facts.senderBox.left - facts.mark.right;
+    report.steps.rows = { lead, toSender, scale, facts };
+    assert.equal(facts.avatar, false, "a row still has an avatar");
+    assert.ok(lead >= 15 * scale && lead <= 17 * scale, `the mark column starts ${String(lead)} px into the row`);
+    assert.ok(Math.abs(facts.mark.width - 16 * scale) < 1, `the mark column is ${String(facts.mark.width)} px wide`);
+    assert.ok(Math.abs(toSender - 8 * scale) < 1, `the sender starts ${String(toSender)} px after the mark column`);
     assert.ok(facts.dot, "no unread dot on an unread row");
-    assert.ok(facts.dot.right <= facts.avatar.left && facts.dot.left >= facts.content.left, `the dot is not before the avatar: ${JSON.stringify(facts)}`);
+    assert.ok(facts.dot.left >= facts.mark.left && facts.dot.right <= facts.mark.right, `the dot is not in the mark column: ${JSON.stringify(facts)}`);
     assert.equal(facts.sender, "600", "unread rows are not bold");
     assert.equal(facts.checkShown, false, "the box shows at rest");
-    report.screenshots.push(await screenshot("s21-rows"));
-    // Hovered: the box takes the avatar's place.
+    report.screenshots.push(await screenshot("s22-rows"));
+    // Hovered: the box takes the dot's place in the column; unread stays bold.
     await mouse("move", { x: facts.row.left + facts.row.width * 0.5, y: facts.row.top + facts.row.height / 2 });
     await browser.waitUntil(async () => (await rowFacts(`${MARK} one`)).checkShown === true, { timeout: 5000, timeoutMsg: "no selection box on hover" });
     const hovered = await rowFacts(`${MARK} one`);
-    assert.equal(hovered.avatarHidden, true, "the avatar shows under the box");
-    report.screenshots.push(await screenshot("s21-rows-hover"));
+    assert.equal(hovered.dotShown, false, "the dot shows under the box");
+    assert.ok(hovered.checkBox.left >= hovered.mark.left - 0.5 && hovered.checkBox.right <= hovered.mark.right + 0.5, "the box is not in the mark column");
+    report.screenshots.push(await screenshot("s22-rows-hover"));
     await mouse("move", { x: 2, y: 2 });
   });
 
@@ -313,6 +325,9 @@ describe("stage 21: the context menu of messages and the quick actions of mixed 
     await browser.waitUntil(async () => (await rowFacts(`${MARK} one`)).actionsShown, { timeout: 5000, timeoutMsg: "no quick actions on alice's row" });
     const alicesRow = await rowFacts(`${MARK} one`);
     assert.ok(alicesRow.targets >= 4, `only ${String(alicesRow.targets)} quick actions`);
+    // Stage 22: the account's label stays while the actions show, before them.
+    assert.ok(alicesRow.accountDot && alicesRow.accountDot.width > 0, "no account dot on hover");
+    assert.ok(alicesRow.accountDot.right <= alicesRow.actionsBox.left, "the account dot is not before the quick actions");
     assert.equal(alicesRow.archiveDisabled, null, "alice's archive is disabled");
     report.steps.unifiedAlice = alicesRow;
     report.screenshots.push(await screenshot("s21-unified-hover"));

@@ -61,6 +61,8 @@ pub(crate) const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!("../migrations/0026_list_sort.sql")),
     // Stage 21: "Mark folder as read" as an operation of its own (decision 0063).
     M::up(include_str!("../migrations/0027_mark_mailbox.sql")),
+    // Stage 22: no contact pictures; their table and sync records go (decision 0072).
+    M::up(include_str!("../migrations/0028_no_contact_pictures.sql")),
     // Stage 22: the trigram index for search inside words (decision 0074).
     M::up(include_str!("../migrations/0029_search_substrings.sql")),
 ];

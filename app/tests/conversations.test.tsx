@@ -491,6 +491,10 @@ describe("opening a conversation", () => {
     expect(label.className).toMatch(/\bshrink-1000000\b/);
     expect(label.className).toContain("min-w-(--ui-dot)");
     expect(label.className).toContain("overflow-hidden");
+    // Stage 22 (decision 0072): it carries what the avatar's ring did, so it stays while the quick
+    // actions show (outside the meta that gives way to them).
+    expect(within(projekt as HTMLElement).getByTestId("row-meta").contains(label)).toBe(false);
+    expect(within(projekt as HTMLElement).getByTestId("row-meta-marks").contains(label)).toBe(false);
     // The name whole or not at all: where it does not fit beside the dot it wraps out of sight.
     expect(label.className).toMatch(/\bflex-wrap\b/);
     expect(label.className).toMatch(/\bh-5\b/);

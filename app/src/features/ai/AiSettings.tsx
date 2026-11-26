@@ -38,13 +38,16 @@ import {
   useSetOpenReplySettings,
   useTestAiConnection,
 } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 const KINDS: readonly AiProviderKind[] = ["openai_compatible", "anthropic"];
 
 function Block({ title, description, children, ...rest }: { title: string; description?: string; children: ReactNode; "data-testid"?: string }) {
   return (
-    <section className="flex flex-col gap-3 border-t border-border pt-6" aria-label={title} data-testid={rest["data-testid"]}>
-      <div className="flex flex-col gap-1">
+    <section className="flex flex-col gap-3 border-t border-border pt-6" aria-label={title} data-testid={rest["data-testid"]} {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search with its description. */}
+      <div {...settingAnchor(title)} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 className="text-14 font-semibold text-primary">{title}</h3>
         {description && <p className="text-13 text-secondary">{description}</p>}
       </div>
@@ -328,6 +331,8 @@ function ProfileForm({ initial, onDone, onCancel, existingIds }: ProfileFormProp
         data-testid="ai-profile-name"
       />
       <ChoiceGroup
+        // Stage 22 (decision 0073): a field of the profile form, found through "Providers".
+        findable={false}
         label={t("ai.profiles.form.kind")}
         description={t(`ai.profiles.kindDescription.${draft.kind}`)}
         value={draft.kind}
@@ -392,6 +397,7 @@ function ProfileForm({ initial, onDone, onCancel, existingIds }: ProfileFormProp
         <p className="text-13 text-secondary">{t("ai.profiles.form.modelAfterSave")}</p>
       )}
       <Switch
+        findable={false}
         label={t("ai.profiles.form.structuredOutput")}
         description={t("ai.profiles.form.structuredOutputDescription")}
         checked={draft.structuredOutput}
@@ -694,7 +700,7 @@ function FunctionChoice({ aiFunction, profileId, profiles }: { aiFunction: AiFun
   const set = useSetAiFunction();
   const chosen = profiles.find((profile) => profile.id === profileId);
   return (
-    <div className="flex flex-col gap-1" data-testid={`ai-function-${aiFunction}`}>
+    <div {...settingAnchor(t(`ai.functions.${aiFunction}`))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)} data-testid={`ai-function-${aiFunction}`}>
       <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] items-center gap-x-4">
         <label htmlFor={id} className="text-13 font-medium text-primary">
           {t(`ai.functions.${aiFunction}`)}
@@ -748,6 +754,8 @@ function AccountCloud({ accountId, allowed, account }: { accountId: string; allo
   return (
     <li className="flex flex-col gap-2" data-testid={`ai-account-${accountId}`}>
       <Switch
+        // Stage 22 (decision 0073): a row per account, found through its block.
+        findable={false}
         label={name}
         description={allowed ? t("ai.accounts.allowed") : t("ai.accounts.notAllowed")}
         checked={allowed}
@@ -810,7 +818,8 @@ function OpenRepliesBlock({ settings }: { settings: AiSettingsInfo }) {
       />
       <form
         noValidate
-        className="flex flex-wrap items-end gap-3"
+        {...settingAnchor(t("ai.openReplies.days"))}
+        className={cx("flex flex-wrap items-end gap-3", SETTING_ANCHOR_CLASS)}
         onSubmit={(event) => {
           event.preventDefault();
           commit();

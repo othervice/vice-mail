@@ -7,6 +7,8 @@ import { Notice } from "../../components/Notice";
 import { PRODUCT_NAME } from "../../config/product";
 import type { DefaultMailApp } from "../../services/ipc";
 import { useDefaultMailApp, useSetDefaultMailApp } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 function stateKey(app: DefaultMailApp): "yes" | "no" | "unknown" {
   if (app.isDefault === null) return "unknown";
@@ -98,8 +100,9 @@ export function DefaultMailAppSettings() {
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="default-app">
-      <div className="flex flex-col gap-1">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="default-app" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search. */}
+      <div {...settingAnchor(t("extras.defaultApp.title"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 id={headingId} className="text-14 font-semibold text-primary">
           {t("extras.defaultApp.title")}
         </h3>

@@ -4,7 +4,7 @@ import { contactsIpc, type ContactFilter, type ContactMergeRequest, type CoreEve
 
 // Stage 10: the local contact directory (decision 0023). The views re-query after their own
 // commands. Stage 17 (decision 0050): `contactsChanged` names what the user set on contacts
-// here, in another window or on another device (names, notes, pictures, merges, spam marks).
+// here, in another window or on another device (names, notes, merges, spam marks).
 
 /** Contacts per page of the directory (`listContacts` takes 1..200). */
 export const CONTACT_PAGE_SIZE = 50;
@@ -46,21 +46,20 @@ export function useContactDuplicates() {
 
 /**
  * After a change: the directory, the suggestions, the composer's autocomplete and (stage 17)
- * a contact, its mail and the pictures.
+ * a contact and its mail.
  */
 export function refreshContacts(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["contactDirectory"] });
   void queryClient.invalidateQueries({ queryKey: contactDuplicatesQueryKey });
   void queryClient.invalidateQueries({ queryKey: ["contacts"] });
   void queryClient.invalidateQueries({ queryKey: ["contact"] });
-  void queryClient.invalidateQueries({ queryKey: ["contactPictures"] });
   // Stage 19 (decision 0056): contact groups and the composer's group suggestions.
   void queryClient.invalidateQueries({ queryKey: ["contactLists"] });
   void queryClient.invalidateQueries({ queryKey: ["contactList"] });
   void queryClient.invalidateQueries({ queryKey: ["contactListSuggestions"] });
 }
 
-/** Stage 17: names, notes, pictures, merges or spam marks changed (any window, any device). */
+/** Stage 17: names, notes, merges or spam marks changed (any window, any device). */
 export function handleContactsEvent(queryClient: QueryClient, event: CoreEvent): void {
   if (event.type === "contactsChanged") refreshContacts(queryClient);
 }
@@ -135,27 +134,6 @@ export function useSetContactNote() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ email, note }: { email: string; note: string | null }) => contactsIpc.setContactNote(email, note),
-    onSuccess: () => {
-      refreshContacts(queryClient);
-    },
-  });
-}
-
-export function useSetContactPicture() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ email, token, crop }: { email: string; token: string; crop: { x: number; y: number; size: number } }) =>
-      contactsIpc.setContactPicture(email, token, crop),
-    onSuccess: () => {
-      refreshContacts(queryClient);
-    },
-  });
-}
-
-export function useRemoveContactPicture() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (email: string) => contactsIpc.removeContactPicture(email),
     onSuccess: () => {
       refreshContacts(queryClient);
     },

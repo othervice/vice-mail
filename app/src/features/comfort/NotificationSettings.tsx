@@ -17,6 +17,8 @@ import { useAccounts } from "../accounts/queries";
 import { NotificationPause } from "../desktop/NotificationPause";
 import { NotificationSoundSettings } from "./NotificationSound";
 import { useNotificationSettings, useSetNotificationSettings } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_BLOCK, SETTING_LEGEND_CLASS, settingAnchor } from "../../components/settingAnchor";
 
 /** The categories new mail can announce itself for, in the order of the settings. */
 const NOTIFY_CATEGORIES = ["people", "priority", "notifications", "newsletters"] as const satisfies readonly (keyof NotifyCategories)[];
@@ -144,6 +146,8 @@ export function NotificationSettings() {
       )}
       <Switch
         label={t("comfort.notifications.enabled.label")}
+        // A category below is called "Notifications" too.
+        data-setting-key="comfort.notifications.enabled.label"
         description={t("comfort.notifications.enabled.description")}
         checked={current.enabled}
         disabled={!ready}
@@ -154,8 +158,14 @@ export function NotificationSettings() {
       />
       {/* Stage 21 (decision 0069): pause for an hour or until tomorrow; also in the tray menu. */}
       <NotificationPause disabled={off} />
-      <fieldset className="flex flex-col gap-4" disabled={off}>
-        <legend className="pb-2 text-14 font-semibold text-primary">{t("comfort.notifications.newMail.legend")}</legend>
+      {/* Stage 22 (decision 0073): the groups are found by their legends, every row by its label. */}
+      <fieldset className="flex flex-col gap-4" disabled={off} {...SETTING_BLOCK}>
+        <legend
+          {...settingAnchor(t("comfort.notifications.newMail.legend"))}
+          className={cx("pb-2 text-14 font-semibold text-primary", SETTING_LEGEND_CLASS)}
+        >
+          {t("comfort.notifications.newMail.legend")}
+        </legend>
         <Switch
           label={t("comfort.notifications.newMail.label")}
           checked={current.newMail}
@@ -179,6 +189,8 @@ export function NotificationSettings() {
           <Switch
             key={key}
             label={t(`comfort.notifications.categories.${key}`)}
+            // "Notifications" is also the switch of them all.
+            data-setting-key={`comfort.notifications.categories.${key}`}
             checked={current.categories[key]}
             disabled={off || !current.newMail}
             onChange={(value) => {
@@ -206,7 +218,7 @@ export function NotificationSettings() {
           data-testid="notify-snoozes"
         />
       </fieldset>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" {...SETTING_BLOCK}>
         <Switch
           label={t("comfort.notifications.quiet.label")}
           description={t("comfort.notifications.quiet.description")}
@@ -249,11 +261,17 @@ export function NotificationSettings() {
         data-testid="notify-hide-content"
       />
       {accounts.data && accounts.data.length > 0 && (
-        <fieldset className="flex flex-col gap-4" disabled={off}>
-          <legend className="pb-2 text-14 font-semibold text-primary">{t("comfort.notifications.accounts")}</legend>
+        <fieldset className="flex flex-col gap-4" disabled={off} {...SETTING_BLOCK}>
+          <legend
+            {...settingAnchor(t("comfort.notifications.accounts"))}
+            className={cx("pb-2 text-14 font-semibold text-primary", SETTING_LEGEND_CLASS)}
+          >
+            {t("comfort.notifications.accounts")}
+          </legend>
           {accounts.data.map((account) => (
             <Switch
               key={account.id}
+              findable={false}
               label={account.displayName ? t("nav.account", { name: account.displayName, email: account.email }) : account.email}
               checked={!current.mutedAccounts.includes(account.id)}
               disabled={off}

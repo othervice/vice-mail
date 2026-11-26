@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { ChoiceGroup, type ChoiceOption } from "../../components/ChoiceGroup";
 import { cx } from "../../components/cx";
 import { ErrorNotice } from "../../components/ErrorNotice";
+import { SETTING_ANCHOR_CLASS, settingAnchor } from "../../components/settingAnchor";
 import { SettingsSection } from "../../components/SettingsSection";
 import { Switch } from "../../components/Switch";
 import type { Account, DarkMails, MarkReadOnOpen, PrefetchPeriod, PrefetchSettings } from "../../services/ipc";
@@ -39,7 +40,8 @@ function Block({ title, description, divided = false, children }: BlockProps) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className={cx("flex flex-col gap-4", divided && "border-t border-border pt-6")}>
-      <div className="flex flex-col gap-1">
+      {/* Stage 22 (decision 0073): found by the settings search with its description. */}
+      <div {...settingAnchor(title)} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 id={headingId} className="text-14 font-semibold text-primary">
           {title}
         </h3>

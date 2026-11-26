@@ -3,7 +3,6 @@ import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type 
 import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import { contactListIpc, toCoreError, type Address, type ContactListSummary, type ContactSuggestion, type CoreError } from "../../services/ipc";
-import { Avatar } from "../accounts/Avatar";
 import { useContactListSuggestions } from "../contacts/groups/queries";
 import { addAddresses, addressFull, addressLabel, looksLikeAddress, parseAddressList, sameAddress } from "./addresses";
 import { useContactSuggestions } from "./queries";
@@ -161,15 +160,13 @@ export function RecipientField({
             <li
               key={address.email.toLowerCase()}
               className={cx(
-                "flex max-w-full items-center gap-1 h-6 rounded-full border ps-1 pe-1 text-13",
+                "flex max-w-full items-center gap-1 h-6 rounded-full border ps-2 pe-1 text-13",
                 bad ? "border-danger text-danger" : "border-border-subtle bg-hover text-primary",
               )}
               title={addressFull(address)}
               data-testid="recipient-chip"
               data-invalid={bad || undefined}
             >
-              {/* Stage 17 (decision 0050): the contact's picture, else its initial. */}
-              <Avatar name={address.name} email={address.email} accountColor={0} ring={false} size="mini" />
               <span className="truncate">{addressLabel(address)}</span>
               {bad && <span className="sr-only">{t("composer.recipients.invalidChip")}</span>}
               <button

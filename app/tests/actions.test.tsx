@@ -624,24 +624,25 @@ describe("multi-selection", () => {
     expect(optionName(cursorRow(listbox))).toContain(", Message 9,");
   });
 
-  it("the selection box in the avatar's place toggles a row, and shows in every row while several are selected", async () => {
+  it("the selection box in the mark column toggles a row, and shows in every row while several are selected", async () => {
     const { user } = setup();
     const listbox = await list();
     await user.click(row(listbox, "Message 1"));
-    // Stage 21 (decision 0065): no column of its own; the box shows in the avatar's place on hover.
+    // Stage 22 (decision 0072): no avatar; the narrow mark column at the row's start holds the
+    // unread dot and, on hover, the box in its place.
     const mark = within(row(listbox, "Message 3")).getByTestId("row-check").closest("[data-row-check]") as HTMLElement;
-    expect(mark.contains(within(row(listbox, "Message 3")).getByTestId("avatar"))).toBe(true);
+    expect(mark).toBe(within(row(listbox, "Message 3")).getByTestId("row-mark"));
+    expect(mark.className).toContain("size-(--ui-row-mark)");
+    expect(within(row(listbox, "Message 3")).queryByTestId("avatar")).toBeNull();
     expect(within(row(listbox, "Message 2")).getByTestId("row-check").className).toContain("group-hover/row:flex");
-    expect(within(row(listbox, "Message 2")).getByTestId("row-avatar").className).toContain("group-hover/row:invisible");
 
     await user.click(within(row(listbox, "Message 3")).getByTestId("row-check"));
 
     expect(selectedRows(listbox)).toEqual(["Message 1", "Message 3"]);
     expect(within(row(listbox, "Message 2")).getByTestId("row-check").className).toContain("flex");
     expect(within(row(listbox, "Message 2")).getByTestId("row-check").className).not.toContain("hidden");
-    // In the multiple selection the box stands for the avatar in every row.
-    expect(within(row(listbox, "Message 2")).getByTestId("row-avatar").className).toContain("invisible");
-    expect(within(row(listbox, "Message 2")).getByTestId("row-avatar").className).not.toContain("group-hover/row:invisible");
+    // In the multiple selection the box shows in every row.
+    expect(within(row(listbox, "Message 2")).getByTestId("row-check").className).not.toContain("group-hover/row:flex");
   });
 
   it("Shift+arrows extend from the anchor; X and Space toggle the cursor row; Escape clears", async () => {

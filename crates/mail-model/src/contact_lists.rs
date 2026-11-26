@@ -140,8 +140,6 @@ pub enum VcardImportProblemKind {
     TooManyCards,
     /// A line or card could not be read.
     Malformed,
-    /// A picture was too large, not an image the app shows, or a link (never loaded).
-    PictureSkipped,
     /// A card without any usable address.
     NoAddress,
     /// A group would get more members than allowed, or there are too many groups.
@@ -165,15 +163,13 @@ pub struct VcardImportReport {
     pub cards: u32,
     /// New contacts.
     pub created: u32,
-    /// Known contacts that got a name, a note, a picture or more addresses.
+    /// Known contacts that got a name, a note or more addresses.
     pub updated: u32,
     /// Addresses merged into one contact (several addresses on a card, or a card naming
     /// addresses of different contacts).
     pub merged: u32,
     /// Groups created or extended.
     pub lists: u32,
-    /// Pictures set (re-encoded by the helper, only where the contact had none).
-    pub pictures: u32,
     /// Problems, at most 32.
     pub problems: Vec<VcardImportProblem>,
 }

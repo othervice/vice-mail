@@ -1,6 +1,7 @@
 //! Stage 17, block B in the store (decision 0050): Reply-To with new messages, the sources of
-//! the directory job and its backfill, kinds and the people-only filter, notes and pictures
-//! with their sync records, a contact's mail, search speed at 10,000 contacts, query plans.
+//! the directory job and its backfill, kinds and the people-only filter, notes with their sync
+//! records, a contact's mail, search speed at 10,000 contacts, query plans. Stage 22 (decision
+//! 0072): migration 0028 removes the pictures and their sync state.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -216,7 +217,7 @@ async fn people_only_leaves_out_list_and_system_addresses_and_kinds_can_be_recom
 }
 
 #[tokio::test]
-async fn notes_and_pictures_are_the_user_s_and_are_captured_for_the_sync() {
+async fn notes_are_the_user_s_and_are_captured_for_the_sync() {
     let f = fixture().await;
     f.store
         .record_contacts(
@@ -241,22 +242,9 @@ async fn notes_and_pictures_are_the_user_s_and_are_captured_for_the_sync() {
             .await
             .expect("no contact")
     );
-    let jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
-    let first = f
-        .store
-        .set_contact_picture(
-            "anna@x.example".into(),
-            vec!["anna@y.example".into()],
-            jpeg.clone(),
-        )
-        .await
-        .expect("picture");
     assert_eq!(
         sync_kinds(&f.store).await,
-        [
-            ("contact".to_owned(), "anna@x.example".to_owned()),
-            ("contactPicture".to_owned(), "anna@x.example".to_owned()),
-        ]
+        [("contact".to_owned(), "anna@x.example".to_owned())]
     );
     let content = f
         .store
@@ -266,91 +254,6 @@ async fn notes_and_pictures_are_the_user_s_and_are_captured_for_the_sync() {
     assert_eq!(
         content,
         Some(serde_json::json!({ "note": "Met at the fair" }))
-    );
-    let synced = f
-        .store
-        .read(|c| contacts_view::synced_picture(c, "anna@x.example"))
-        .await
-        .expect("picture content")
-        .expect("some");
-    assert_eq!(synced, serde_json::json!({ "jpeg": "/9j/4AECAw==" }));
-
-    // The contact's picture is found through any of its addresses' keys, head first.
-    let found = f
-        .store
-        .contact_picture_of(vec!["anna@y.example".into(), "anna@x.example".into()])
-        .await
-        .expect("read")
-        .expect("found");
-    assert_eq!(found.key, "anna@x.example");
-    assert_eq!(found.display.as_deref(), Some(jpeg.as_slice()));
-    let again = f
-        .store
-        .set_contact_picture("anna@x.example".into(), Vec::new(), jpeg.clone())
-        .await
-        .expect("again");
-    assert!(again > first, "every picture gets a new revision");
-
-    // From another device: stored, but not shown before this device encoded it again.
-    clear_dirty(&f.store).await;
-    let other = serde_json::json!({ "jpeg": contacts_view::base64(&[0xFF, 0xD8, 0xFF, 9]) });
-    f.store
-        .write(move |tx| contacts_view::apply_synced_picture(tx, "otto@z.example", Some(&other)))
-        .await
-        .expect("apply");
-    // The sync pass removes the mark of what it applied (`apply_remote`).
-    clear_dirty(&f.store).await;
-    let otto = f
-        .store
-        .contact_picture_of(vec!["otto@z.example".into()])
-        .await
-        .expect("read")
-        .expect("otto");
-    assert_eq!(otto.display, None);
-    assert_eq!(otto.image, [0xFF, 0xD8, 0xFF, 9]);
-    assert!(
-        !f.store
-            .set_contact_picture_display("otto@z.example".into(), otto.revision - 1, vec![1])
-            .await
-            .expect("stale")
-    );
-    assert!(
-        f.store
-            .set_contact_picture_display("otto@z.example".into(), otto.revision, vec![0xFF, 0xD8])
-            .await
-            .expect("display")
-    );
-    assert!(
-        sync_kinds(&f.store).await.is_empty(),
-        "the local encoding is not synchronised: {:?}",
-        sync_kinds(&f.store).await
-    );
-    let refused = f
-        .store
-        .write(|tx| {
-            contacts_view::apply_synced_picture(
-                tx,
-                "otto@z.example",
-                Some(&serde_json::json!({ "jpeg": "not base64!" })),
-            )
-        })
-        .await;
-    assert!(refused.is_err());
-    let listed = f.store.contact_pictures().await.expect("list");
-    assert_eq!(
-        listed.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
-        ["anna@x.example", "otto@z.example"]
-    );
-    assert_eq!(
-        f.store
-            .remove_contact_pictures(vec!["anna@x.example".into(), "anna@y.example".into()])
-            .await
-            .expect("remove"),
-        1
-    );
-    assert_eq!(
-        sync_kinds(&f.store).await,
-        [("contactPicture".to_owned(), "anna@x.example".to_owned())]
     );
 }
 
@@ -485,10 +388,6 @@ async fn new_statements_use_their_indexes() {
             contacts_view::SENDER_MESSAGES.to_owned(),
             "SEARCH message USING COVERING INDEX message_sender (sender_key=?)",
         ),
-        (
-            contacts_view::PICTURE_BY_KEY.to_owned(),
-            "SEARCH contact_picture USING INDEX sqlite_autoindex_contact_picture_1 (address_key=?)",
-        ),
     ] {
         let lines = f
             .store
@@ -503,10 +402,9 @@ async fn new_statements_use_their_indexes() {
 }
 
 /// Records from another device arrive through the pass's `apply_sync`: the name and note of a
-/// contact, its picture (stored, shown only after this device encoded it), and the picture's
-/// removal. Applying is not a local change: nothing is marked for the next pass.
+/// contact. Applying is not a local change: nothing is marked for the next pass.
 #[tokio::test]
-async fn a_note_and_a_picture_from_another_device_are_applied_and_removed() {
+async fn a_note_from_another_device_is_applied() {
     use crate::settings_sync::{SyncApply, SyncRecordRow, TableWrite};
     let f = fixture().await;
     f.store
@@ -532,27 +430,19 @@ async fn a_note_and_a_picture_from_another_device_are_applied_and_removed() {
             rekey_from: None,
         }
     };
-    let jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 7];
     let outcome = f
         .store
         .apply_sync(
-            vec![
-                apply(
-                    "contact",
-                    "1764000000000-00000000-b",
-                    Some(serde_json::json!({ "userName": "Anna A.", "note": "From the laptop" })),
-                ),
-                apply(
-                    "contactPicture",
-                    "1764000000000-00000000-b",
-                    Some(serde_json::json!({ "jpeg": contacts_view::base64(&jpeg) })),
-                ),
-            ],
+            vec![apply(
+                "contact",
+                "1764000000000-00000000-b",
+                Some(serde_json::json!({ "userName": "Anna A.", "note": "From the laptop" })),
+            )],
             None,
         )
         .await
         .expect("apply");
-    assert_eq!(outcome.applied.len(), 2, "{outcome:?}");
+    assert_eq!(outcome.applied.len(), 1, "{outcome:?}");
     let row = f
         .store
         .contact_group("anna@x.example".into())
@@ -561,41 +451,79 @@ async fn a_note_and_a_picture_from_another_device_are_applied_and_removed() {
         .expect("anna");
     assert_eq!(row.head().user_name.as_deref(), Some("Anna A."));
     assert_eq!(row.head().note.as_deref(), Some("From the laptop"));
-    let picture = f
-        .store
-        .contact_picture_of(vec!["anna@x.example".into()])
-        .await
-        .expect("read")
-        .expect("picture");
-    assert_eq!(picture.image, jpeg);
-    assert_eq!(
-        picture.display, None,
-        "not shown before this device encoded it"
-    );
     assert!(
         sync_kinds(&f.store).await.is_empty(),
         "applying is no local change"
     );
+}
 
-    let outcome = f
-        .store
-        .apply_sync(
-            vec![SyncApply {
-                // The pass plans against the version it read.
-                expected: Some("1764000000000-00000000-b".into()),
-                ..apply("contactPicture", "", None)
-            }],
-            None,
-        )
+/// Stage 22 (decision 0072): migration 0028 drops the pictures, their change capture and this
+/// device's sync state of them; the contacts and every other sync record stay.
+#[tokio::test]
+async fn the_migration_removes_pictures_and_their_sync_records() {
+    use crate::migrations::MIGRATIONS;
+    use crate::store::Schema;
+    use crate::{StoreOptions, test_support::db_path};
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    let path = db_path(&dir);
+    // The 25 migrations before 0028.
+    let before = Schema::from_vec(MIGRATIONS[..25].to_vec());
+    let store = Store::open_with(&path, StoreOptions::default(), &before).expect("old schema");
+    store
+        .record_contacts(vec![contact("anna@x.example", 9.0, "Anna", 0)], Vec::new())
         .await
-        .expect("remove");
-    assert_eq!(outcome.applied.len(), 1, "{outcome:?}");
-    assert!(
-        f.store
-            .contact_picture_of(vec!["anna@x.example".into()])
-            .await
-            .expect("read")
-            .is_none()
+        .expect("record");
+    store
+        .write(|tx| {
+            tx.execute_batch(
+                "INSERT INTO contact_picture (address_key, image, display, revision)
+                 VALUES ('anna@x.example', x'FFD8FFE001', x'FFD8FFE001', 1),
+                        ('otto@z.example', x'FFD8FFE002', NULL, 2);
+                 INSERT INTO sync_record (kind, id, version, synced_version, content, updated_at)
+                 VALUES ('contactPicture', 'anna@x.example', 'v1', 'v1', '{\"jpeg\":\"/9j/4AE=\"}', 1),
+                        ('contact', 'anna@x.example', 'v1', 'v1', '{\"note\":\"Hi\"}', 1);
+                 INSERT OR IGNORE INTO sync_dirty (kind, id)
+                 VALUES ('contactPicture', 'otto@z.example');",
+            )?;
+            Ok(())
+        })
+        .await
+        .expect("pictures of stage 17");
+    drop(store);
+    let store = Store::open(&path, StoreOptions::default()).expect("migrated");
+    let (tables, triggers, records, dirty) = store
+        .read(|c| {
+            let names = |kind: &str| -> rusqlite::Result<Vec<String>> {
+                c.prepare(
+                    "SELECT name FROM sqlite_master WHERE type = ?1 AND name LIKE '%picture%'",
+                )?
+                .query_map([kind], |r| r.get(0))?
+                .collect()
+            };
+            let records: Vec<(String, String)> = c
+                .prepare("SELECT kind, id FROM sync_record ORDER BY kind, id")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            let dirty: i64 = c.query_row(
+                "SELECT count(*) FROM sync_dirty WHERE kind = 'contactPicture'",
+                [],
+                |r| r.get(0),
+            )?;
+            Ok((names("table")?, names("trigger")?, records, dirty))
+        })
+        .await
+        .expect("read");
+    assert_eq!(tables, Vec::<String>::new());
+    assert_eq!(triggers, Vec::<String>::new());
+    assert_eq!(
+        records,
+        [("contact".to_owned(), "anna@x.example".to_owned())]
     );
-    assert!(sync_kinds(&f.store).await.is_empty());
+    assert_eq!(dirty, 0);
+    let anna = store
+        .contact_group("anna@x.example".into())
+        .await
+        .expect("read")
+        .expect("the contact stays");
+    assert_eq!(anna.head().key, "anna@x.example");
 }

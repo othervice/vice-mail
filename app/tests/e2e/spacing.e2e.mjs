@@ -13,7 +13,7 @@
 // - icon-gap: 8 px between the icon and the label of a button, menu entry, navigation row or
 //   palette entry, 4 px in round chips and small buttons with 12 px text;
 // - edges: what stands in one column starts at one inset (the list's title, section labels and
-//   avatars; the column's section labels and row icons; the palette's group labels and icons; the
+//   the rows' mark column, stage 22: no avatars; the column's section labels and row icons; the palette's group labels and icons; the
 //   activity view and its header);
 // - clipped: no text is cut off without an ellipsis, chips and pills never (the replies pill's
 //   word keeps at least 2.5 em or goes), and no text runs past its card, menu or dialog.
@@ -206,7 +206,7 @@ const PROBE = () => {
   const gaps = [];
   for (const host of document.querySelectorAll(HOSTS)) {
     if (!shown(host)) continue;
-    // Rows of the message list start with an avatar or a tile, not an icon; the accent swatches
+    // Rows of the message list start with their mark column, not an icon; the accent swatches
     // are colour, not icons.
     if (host.closest('[data-testid="message-list"]') && !host.matches('[data-testid="row-replies"]')) continue;
     if (host.closest('[data-testid^="accent-"]')) continue;
@@ -322,13 +322,17 @@ const PROBE = () => {
     viewTitle: defaultInset ? textLeftOf("main header h1") : null,
     activityStart: activity && shown(activity) ? leftOf(':scope > div > *, :scope > *', activity) : null,
     listSection: list ? textLeftOf('[data-testid="list-section"] span, [data-testid="list-section"]', list) : null,
-    // A row of the list itself, not one inside a card (priority, an unfolded bundle).
-    rowAvatar: list
+    // A row of the list itself, not one inside a card (priority, an unfolded bundle). Stage 22: the
+    // mark column (unread dot, selection box) where the avatar was.
+    rowMark: list
       ? (() => {
-          const avatar = [...list.querySelectorAll('[data-testid="message-row"] [data-testid="avatar"]')].find((el) => !el.closest(".list-card") && shown(el));
-          return avatar ? round(avatar.getBoundingClientRect().left) : null;
+          const mark = [...list.querySelectorAll('[data-testid="message-row"] [data-testid="row-mark"], [data-testid="table-row"] [data-testid="row-mark"]')].find(
+            (el) => !el.closest(".list-card") && shown(el),
+          );
+          return mark ? round(mark.getBoundingClientRect().left) : null;
         })()
       : null,
+    rowAvatars: list ? list.querySelectorAll('[data-testid="avatar"]').length : 0,
     columnSection: column ? textLeftOf('[data-testid^="sidebar-section-"] > span', column) : null,
     columnRowIcon: column ? leftOf('[role="treeitem"] svg', column) : null,
     paletteGroup: textLeftOf('[data-testid="command-palette"] [role="group"] > [role="presentation"]'),
@@ -421,8 +425,9 @@ function rules(scene, facts) {
   const same = (what, a, b) => {
     if (a !== null && b !== null && !near(a, b, 1)) fail("edges", `${what}: ${String(a)} vs ${String(b)}`);
   };
-  same("list title vs row avatar", e.listTitle, e.rowAvatar);
-  same("list section vs row avatar", e.listSection, e.rowAvatar);
+  same("list title vs row mark", e.listTitle, e.rowMark);
+  same("list section vs row mark", e.listSection, e.rowMark);
+  if (e.rowAvatars > 0) fail("edges", `${String(e.rowAvatars)} avatars in the list (decision 0072)`);
   same("column section vs row icon", e.columnSection, e.columnRowIcon);
   same("activity title vs content", e.viewTitle, e.activityStart);
   same("palette group vs option icon", e.paletteGroup, e.paletteIcon);

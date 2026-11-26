@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { cx } from "../../components/cx";
 import type { Account, Address, MessageViewHeader } from "../../services/ipc";
 import { accountFill } from "../accounts/accountColor";
-import { Avatar } from "../accounts/Avatar";
 import { useAccounts } from "../accounts/queries";
 import { formatFullDate } from "../messages/rows";
 import { addressName } from "./format";
@@ -201,7 +200,8 @@ interface MessageHeaderProps {
 /**
  * Head of a message (docs/DESIGN.md): subject, sender with name and address, recipients (long
  * lists folded), date and time, and the account with its colour and name. In the reading pane the
- * subject is the title above the card and this is the card's head.
+ * subject is the title above the card and this is the card's head. No avatar (stage 22, decision
+ * 0072): the sender's name starts at the card's edge.
  */
 export function MessageHeader({ header, account, fileName, subjectId, showSubject = true, menu, collapsible = false }: MessageHeaderProps) {
   const { t, i18n } = useTranslation();
@@ -223,7 +223,6 @@ export function MessageHeader({ header, account, fileName, subjectId, showSubjec
     <header className="flex flex-col gap-4">
       {showSubject && <SubjectTitle subject={header.subject} subjectId={subjectId} />}
       <div className="flex items-start gap-3">
-        <Avatar name={sender?.name} email={sender?.email ?? ""} accountColor={account?.color ?? 0} ring={false} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <p className="min-w-0 break-words select-text" data-testid="reading-from">

@@ -13,6 +13,8 @@ import { RecipientField } from "../composer/RecipientField";
 import { escapeHtml, placeholderToken, TEMPLATE_PLACEHOLDERS } from "./placeholders";
 import { hasNotes, SnippetNotes } from "./SnippetNotes";
 import { useDeleteTemplate, useSaveTemplate, useTemplates } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 // The editor (TipTap) loads with the first template that is edited, not with the settings.
 const RichEditor = lazy(() => import("../composer/RichEditor").then((module) => ({ default: module.RichEditor })));
@@ -44,11 +46,19 @@ export function TemplateSettings() {
   const edited = editing?.kind === "edit" ? (list.find((tpl) => tpl.id === editing.id) ?? null) : null;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="template-settings">
-      <h3 id={headingId} className="text-14 font-semibold text-primary">
-        {t("snippets.templates.title")}
-      </h3>
-      <p className="text-13 text-secondary">{t("snippets.templates.hint")}</p>
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
+      data-testid="template-settings"
+      {...SETTING_BLOCK}
+    >
+      {/* Stage 22 (decision 0073): found by the settings search. */}
+      <div {...settingAnchor(t("snippets.templates.title"))} className={cx("flex flex-col gap-3", SETTING_ANCHOR_CLASS)}>
+        <h3 id={headingId} className="text-14 font-semibold text-primary">
+          {t("snippets.templates.title")}
+        </h3>
+        <p className="text-13 text-secondary">{t("snippets.templates.hint")}</p>
+      </div>
       {templates.isError && (
         <ErrorNotice context={t("snippets.templates.loadFailed")} error={templates.error} onRetry={() => void templates.refetch()} />
       )}

@@ -108,6 +108,8 @@ export function LocalRules() {
           {list.map((rule, index) => (
             <li key={rule.id} className="flex flex-col gap-2 px-4 py-3" data-testid="rule">
               <Switch
+                // Stage 22 (decision 0073): the user's rule, found through "Local rules".
+                findable={false}
                 label={rule.name}
                 description={t("comfort.rules.summary", {
                   conditions: rule.conditions.length,
@@ -262,7 +264,9 @@ function RuleEditor({ initial, accounts, saving, error, onSave, onCancel }: Rule
         error={tried && problem === "name" ? t("comfort.rules.problems.name") : null}
         data-testid="rule-name"
       />
+      {/* The editor's fields are no settings of their own: the search finds "Local rules". */}
       <ChoiceGroup
+        findable={false}
         label={t("comfort.rules.match.label")}
         value={input.matchAll ? "all" : "any"}
         options={[
@@ -411,6 +415,7 @@ function RuleEditor({ initial, accounts, saving, error, onSave, onCancel }: Rule
         </div>
       </fieldset>
       <Switch
+        findable={false}
         label={t("comfort.rules.stop.label")}
         description={t("comfort.rules.stop.description")}
         checked={input.stop}
@@ -419,6 +424,7 @@ function RuleEditor({ initial, accounts, saving, error, onSave, onCancel }: Rule
         }}
       />
       <Switch
+        findable={false}
         label={t("comfort.rules.enabled")}
         checked={input.enabled}
         onChange={(enabled) => {

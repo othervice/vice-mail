@@ -143,12 +143,6 @@ impl Property<'_> {
             .map(|(_, v)| v.trim())
     }
 
-    /// `ENCODING=b` / `BASE64` (vCard 3.0, 2.1).
-    pub fn is_base64(&self) -> bool {
-        self.param_values("ENCODING")
-            .any(|v| v == "B" || v == "BASE64")
-    }
-
     /// The value as text: quoted-printable undone, converted from `CHARSET` (UTF-8 when it is
     /// valid UTF-8 and no charset is named, else Windows-1252). Escapes are left in place.
     pub fn text(&self) -> String {

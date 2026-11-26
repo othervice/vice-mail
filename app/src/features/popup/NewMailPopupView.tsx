@@ -1,11 +1,10 @@
-import { Mail, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
 import type { CoreError, MessageId, NewMailCard, NewMailPopup } from "../../services/ipc";
-import { accountFill, initials } from "../accounts/accountColor";
-import { senderTint } from "../accounts/senderTint";
+import { accountFill } from "../accounts/accountColor";
 import { dayBounds, firstDayOfWeek, formatFullDate, formatListDate } from "../messages/rows";
 
 /** A card whose button is waiting for the core, or whose last action failed. */
@@ -32,8 +31,9 @@ export interface NewMailPopupViewProps {
 /**
  * Stage 18 (decision 0051): the popup for new mail, drawn in its own window at the bottom right
  * of the screen. One card per message, newest on top, at most three, then a line "N more" that
- * opens the inbox. A card shows the sender's picture or initials, name, subject, two lines of
- * the snippet as plain text, the time and, where there are several accounts, the account; its
+ * opens the inbox. A card shows the sender's name (no picture, stage 22, decision 0072), subject,
+ * two lines of the snippet as plain text, the time and, where there are several accounts, the
+ * account; its
  * buttons are "Read", "Delete" (disabled with the reason for a read-only account) and close.
  * With hidden content a card only says "New message" and offers "Read". A deleted card says
  * "Deleted" with "Undo". The window never takes the focus; a polite live region tells screen
@@ -146,9 +146,8 @@ function Card({ card, state, time, fullTime, onRead, onDelete, onUndo, onClose }
       aria-labelledby={titleId}
       data-testid="popup-card"
       data-message-id={card.messageId}
-      className="flex gap-3 px-4 pt-3 pb-3"
+      className="flex px-4 pt-3 pb-3"
     >
-      <CardAvatar card={card} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2">
           <h2 id={titleId} className="min-w-0 flex-1 truncate text-14 font-semibold text-primary" data-testid="popup-sender">
@@ -225,35 +224,5 @@ function ErrorLine({ error }: { error: CoreError }) {
     <p role="alert" className="mt-1 text-12 text-danger" data-testid="popup-error" data-error-code={error.code}>
       {t("popup.failed", { reason: t(`errors.codes.${error.code}.title`) })}
     </p>
-  );
-}
-
-/** The contact's picture (a JPEG the core's helper wrote), else initials on the sender's tint. */
-function CardAvatar({ card }: { card: NewMailCard }) {
-  const content = card.content;
-  if (!content) {
-    return (
-      <span aria-hidden className="flex size-(--ui-avatar) shrink-0 items-center justify-center rounded-full bg-badge text-secondary">
-        <Mail className="size-4" strokeWidth={1.75} />
-      </span>
-    );
-  }
-  const email = content.senderEmail ?? "";
-  return (
-    <span
-      aria-hidden
-      data-testid="popup-avatar"
-      data-picture={content.picture ? "" : undefined}
-      className={cx(
-        "flex size-(--ui-avatar) shrink-0 items-center justify-center overflow-hidden rounded-full text-12 font-semibold select-none",
-        !content.picture && senderTint(email, content.senderName),
-      )}
-    >
-      {content.picture ? (
-        <img src={content.picture} alt="" draggable={false} className="size-full object-cover" />
-      ) : (
-        initials(content.senderName, email)
-      )}
-    </span>
   );
 }

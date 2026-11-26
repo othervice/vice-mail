@@ -11,6 +11,8 @@ import {
   useSetAutostart,
   useSetBackgroundSettings,
 } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 /**
  * Settings → General, stage 21 (decisions 0069, 0070): whether closing the window keeps the app
@@ -31,8 +33,9 @@ export function BackgroundSettings() {
   const macos = platform === "macos";
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4" data-testid="background-settings">
-      <h3 id={headingId} className="text-14 font-semibold text-primary">
+    <section aria-labelledby={headingId} className="flex flex-col gap-4" data-testid="background-settings" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search, like each of its switches. */}
+      <h3 id={headingId} {...settingAnchor(t("desktop.background.title"))} className={cx("text-14 font-semibold text-primary", SETTING_ANCHOR_CLASS)}>
         {t("desktop.background.title")}
       </h3>
       {settings.isError && (

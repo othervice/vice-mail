@@ -472,18 +472,15 @@ fn ms(seconds: Option<i64>) -> Option<i64> {
     seconds.map(|s| s.saturating_mul(1000))
 }
 
-/// Stage 17: what an entry shows besides its rows: the pictures (address key → revision) and
-/// the blocked addresses.
+/// Stage 17: what an entry shows besides its rows: the blocked addresses.
 #[derive(Debug, Default)]
 pub(crate) struct Extras {
-    pub(crate) pictures: HashMap<String, i64>,
     pub(crate) blocked: HashSet<String>,
 }
 
 impl Extras {
     pub(crate) async fn load(store: &Store) -> Result<Self, CoreError> {
         Ok(Self {
-            pictures: store.contact_pictures().await?.into_iter().collect(),
             blocked: store
                 .blocked_senders()
                 .await?
@@ -522,10 +519,6 @@ pub(crate) fn entry_of(group: &StoredContactGroup, extras: &Extras) -> ContactEn
         last_used: ms(contact.last_used()),
         kind: ContactKind::from_code(head.kind).unwrap_or(ContactKind::Person),
         note: group.members.iter().find_map(|m| m.note.clone()),
-        picture: group
-            .members
-            .iter()
-            .find_map(|m| extras.pictures.get(&m.key).copied()),
         blocked: addresses.iter().any(|a| a.blocked),
         addresses,
     }

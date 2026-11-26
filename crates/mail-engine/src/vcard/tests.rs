@@ -1,5 +1,5 @@
-//! Stage 19 (decision 0056): vCard import and export through `AppCore` with the real store; the
-//! picture step runs in the process (no helper in tests, as for chosen pictures).
+//! Stage 19 (decision 0056): vCard import and export through `AppCore` with the real store. Since
+//! stage 22 (decision 0072) a card's picture is skipped on import and none is written.
 
 use mail_model::{ContactExport, ContactFilter, VcardImportProblemKind, VcardVersionChoice};
 use tempfile::TempDir;
@@ -64,7 +64,6 @@ async fn imported_cards_become_contacts_and_groups_and_duplicates_merge() {
     );
     assert_eq!(report.created, 2);
     assert_eq!(report.lists, 1);
-    assert_eq!(report.pictures, 1);
     assert_eq!(report.merged, 1, "two addresses of one card");
     let ada = core
         .get_contact("ada@work.example".into())
@@ -74,13 +73,6 @@ async fn imported_cards_become_contacts_and_groups_and_duplicates_merge() {
     assert_eq!(ada.email, "ada@example.org", "the preferred address leads");
     assert_eq!(ada.addresses.len(), 2);
     assert_eq!(ada.note.as_deref(), Some("Met at the, conference"));
-    assert!(ada.picture.is_some(), "the picture, encoded again");
-    let picture = core
-        .get_contact_picture("ada@example.org".into())
-        .await
-        .expect("picture")
-        .expect("one");
-    assert!(picture.data_url.starts_with("data:image/jpeg;base64,"));
 
     let lists = core.list_contact_lists().await.expect("lists");
     assert_eq!(lists.len(), 1);
@@ -153,7 +145,6 @@ async fn an_export_imports_into_an_empty_installation_as_it_was() {
         let there = core(&other).await;
         let report = there.import_vcard_file(out).await.expect("import export");
         assert_eq!(report.created, 2, "{version:?}");
-        assert_eq!(report.pictures, 1);
         let page = there
             .list_contacts(None, None, 50, ContactFilter::People)
             .await
@@ -197,8 +188,8 @@ async fn an_export_imports_into_an_empty_installation_as_it_was() {
         );
         let text = std::fs::read_to_string(single).expect("read");
         assert!(
-            text.contains("ada@work.example") && text.contains("PHOTO"),
-            "{text}"
+            text.contains("ada@work.example") && !text.contains("PHOTO"),
+            "no picture (decision 0072): {text}"
         );
     }
 }
@@ -218,10 +209,6 @@ garbage line\r\nBEGIN:VCARD\r\nFN:Cut off\r\nEMAIL:cut@example.org\r\n";
     assert_eq!(report.created, 2, "link@ and cut@");
     let kinds: Vec<VcardImportProblemKind> = report.problems.iter().map(|p| p.kind).collect();
     assert!(
-        kinds.contains(&VcardImportProblemKind::PictureSkipped),
-        "{kinds:?}"
-    );
-    assert!(
         kinds.contains(&VcardImportProblemKind::NoAddress),
         "{kinds:?}"
     );
@@ -229,11 +216,12 @@ garbage line\r\nBEGIN:VCARD\r\nFN:Cut off\r\nEMAIL:cut@example.org\r\n";
         kinds.contains(&VcardImportProblemKind::Malformed),
         "{kinds:?}"
     );
+    // The picture link is skipped silently, never loaded from the network.
     let link = core
         .get_contact("link@example.org".into())
         .await
         .expect("link");
-    assert!(link.picture.is_none(), "never loaded from the network");
+    assert_eq!(link.name.as_deref(), Some("Link Photo"));
     // Not a file: refused.
     let err = core
         .import_vcard_file(dir.path().to_owned())

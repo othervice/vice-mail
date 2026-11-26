@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { cx } from "../components/cx";
 import { Tooltip } from "../components/Tooltip";
 import { useRovingFocus } from "../components/useRovingFocus";
-import { Avatar } from "../features/accounts/Avatar";
+import { accountFill } from "../features/accounts/accountColor";
 import { useSelectedAccount } from "../features/accounts/selection";
 import { useOutboxCounts } from "../features/actions/queries";
 import { useOutgoing } from "../features/composer/queries";
@@ -138,13 +138,16 @@ function RailButton({ icon: Icon, label, expanded, active = false, onClick, disc
   );
 }
 
-/** Small mark on an account that is offline or stopped, so the rail shows trouble at a glance. */
+/**
+ * Small mark on an account that is offline or stopped, so the rail shows trouble at a glance: at
+ * the end of the entry's lower edge, clear of the account's dot.
+ */
 function StateBadge({ account }: { account: Account }) {
   const state = account.status.state;
   if (state !== "offline" && state !== "error") return null;
   const Icon = state === "error" ? CircleExclamationPoint : CloudOff;
   return (
-    <span className="absolute -right-1 -bottom-1 flex rounded-full bg-rail p-px">
+    <span className="absolute end-1 bottom-1 flex rounded-full bg-rail p-px" data-testid="account-state-badge">
       <Icon
         aria-hidden
         className={cx("size-3", state === "error" ? "text-danger" : "text-secondary")}
@@ -253,7 +256,11 @@ function useAccountLabel() {
     });
 }
 
-/** One entry per account with its colour, initials and name (tooltip and accessible name). */
+/**
+ * One entry per account: a dot in its colour (stage 22, decision 0072: no initials), its name as
+ * tooltip and accessible name, which always say what the colour alone cannot (two accounts may
+ * share a colour).
+ */
 function AccountSwitcher({ accounts, selected, roving }: { accounts: readonly Account[]; selected: Account | null; roving: (key: string) => Roving }) {
   const { t } = useTranslation();
   const selectAccount = useUiStore((state) => state.selectAccount);
@@ -282,10 +289,8 @@ function AccountSwitcher({ accounts, selected, roving }: { accounts: readonly Ac
                   current && accounts.length > 1 ? "bg-selected" : "hover:bg-rail-hover",
                 )}
               >
-                <span className="relative flex">
-                  <Avatar name={account.displayName} email={account.email} accountColor={account.color} />
-                  <StateBadge account={account} />
-                </span>
+                <span aria-hidden className={cx("size-(--ui-rail-account-dot) rounded-full", accountFill(account.color))} data-testid="account-dot" />
+                <StateBadge account={account} />
               </button>
             </Tooltip>
           </li>

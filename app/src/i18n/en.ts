@@ -1079,6 +1079,17 @@ export const en = {
     // Stage 10
     contacts: { title: "Contacts" },
     sections: "Settings sections",
+    // Stage 22 (decision 0073): searching the settings.
+    search: {
+      label: "Search settings",
+      placeholder: "Search settings…",
+      results: "Settings found",
+      count_one: "{{count}} setting found",
+      count_other: "{{count}} settings found",
+      none: "No setting found for “{{query}}”.",
+      clear: "Clear the search",
+      section: "The whole page",
+    },
     general: {
       title: "General",
       language: {
@@ -2854,7 +2865,7 @@ export const en = {
   },
   // Stage 10: the local contact directory (Settings → Contacts).
   contacts: {
-    intro: "Built on this device from every address in mail you sent and received. Pictures, notes and spam marks are in Contacts; possible duplicates are here.",
+    intro: "Built on this device from every address in mail you sent and received. Notes and spam marks are in Contacts; possible duplicates are here.",
     // Stage 17 (decision 0050).
     openView: "Open contacts",
     search: "Search contacts",
@@ -2955,28 +2966,6 @@ export const en = {
       recentLoading: "Loading mail…",
       recentEmpty: "No mail with this contact is stored on this device.",
       recentFailed: "The recent mail could not be loaded.",
-      picture: {
-        choose: "Choose picture…",
-        change: "Change picture…",
-        remove: "Remove picture",
-        loading: "Reading the picture…",
-        dropHint: "or drop an image here",
-        dropping: "Drop the image to use it",
-        failed: "The picture could not be used.",
-        removeFailed: "The picture could not be removed.",
-      },
-      cropper: {
-        title: "Choose the part to show",
-        hint: "Drag the image or move it with the arrow keys; plus and minus zoom. Enter saves, Escape cancels.",
-        area: "Picture of {{name}}",
-        zoom: "Zoom",
-        zoomIn: "Zoom in",
-        zoomOut: "Zoom out",
-        save: "Save picture",
-        saving: "Saving…",
-        cancel: "Cancel",
-        failed: "The picture could not be saved.",
-      },
       spam: {
         moveTitle_one: "Move {{count}} message to Junk too?",
         moveTitle_other: "Move {{count}} messages to Junk too?",
@@ -3724,19 +3713,6 @@ export const en = {
         title: "No JMAP service was found at this address.",
         hint: "Check the server name and port. A JMAP server answers at https://server/.well-known/jmap. If your provider offers no JMAP, choose IMAP and SMTP in the server settings.",
       },
-      // Stage 17 (decision 0050): contact pictures.
-      picture_too_large: {
-        title: "The picture is too large.",
-        hint: "Choose an image file of at most 20 MB and at most 64 megapixels.",
-      },
-      picture_unsupported: {
-        title: "This file cannot be used as a picture.",
-        hint: "Choose a PNG, JPEG, GIF or WebP image.",
-      },
-      picture_damaged: {
-        title: "The picture could not be read.",
-        hint: "The file may be damaged. Choose another image.",
-      },
       // Stage 20 (decision 0060).
       over_quota: {
         title: "The mailbox on the server is full.",
@@ -4457,7 +4433,7 @@ export const en = {
       exportGroup: "Export the group {{name}}…",
       imported_one: "{{count}} card read",
       imported_other: "{{count}} cards read",
-      importDetail: "New contacts: {{created}}, updated: {{updated}}, groups: {{lists}}, pictures: {{pictures}}.",
+      importDetail: "New contacts: {{created}}, updated: {{updated}}, groups: {{lists}}.",
       problems_one: "{{count}} card or line could not be taken over completely.",
       problems_other: "{{count}} cards or lines could not be taken over completely.",
       exported_one: "{{count}} card saved",

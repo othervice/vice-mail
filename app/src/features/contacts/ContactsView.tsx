@@ -7,7 +7,6 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { ViewHeader } from "../../components/ViewHeader";
 import type { ContactEntry } from "../../services/ipc";
-import { Avatar } from "../accounts/Avatar";
 import { useWindowDragRegion } from "../app-info/useWindowDragRegion";
 import { dayBounds, formatFullDate, formatListDate } from "../messages/rows";
 import { ContactBadges, ContactDetail } from "./ContactDetail";
@@ -55,12 +54,11 @@ function ContactOption({
       data-testid="contact-row"
       data-contact={contact.key}
       className={cx(
-        "mx-2 flex cursor-default items-center gap-3 rounded-row px-2 py-2",
+        "mx-2 flex cursor-default items-center gap-3 rounded-row px-3 py-2",
         selected ? "bg-selected" : "hover:bg-hover",
         active && "outline-2 -outline-offset-2 outline-focus-ring",
       )}
     >
-      <Avatar name={contact.name} email={contact.email} accountColor={0} ring={false} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate text-14 font-medium text-primary" data-testid="contact-name">
@@ -88,8 +86,8 @@ function ContactOption({
 
 /**
  * Stage 17 (decision 0050): the contacts as a view of their own ("Contacts" in the column, the
- * rail and the palette). On the left every contact with picture, name, address and the date of
- * the last mail, most used first, with a search over name, address and domain and, on request,
+ * rail and the palette). On the left every contact with name, address and the date of the last
+ * mail (no picture, stage 22, decision 0072), most used first, with a search over name, address and domain and, on request,
  * the list and system addresses; on the right the chosen contact. Only what the core built from
  * mail on this device: without mail it says so, never with examples. Keyboard: the search field,
  * then the list (arrow keys, Home, End; Enter goes to the contact), then the contact's controls.

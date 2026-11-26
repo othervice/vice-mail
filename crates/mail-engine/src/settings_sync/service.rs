@@ -891,6 +891,12 @@ impl<C: Connector> AppCore<C> {
                 }
                 // Counted in the summary below.
                 Notice::Postponed { .. } => {}
+                Notice::Retired { handle } => {
+                    tracing::debug!(
+                        uid = handle.0,
+                        "settings sync entry of a retired kind ignored"
+                    );
+                }
             }
         }
         {
@@ -965,9 +971,9 @@ impl<C: Connector> AppCore<C> {
         if any(&["savedView"]) {
             self.emit_event(CoreEvent::SavedSearchesChanged);
         }
-        // Stage 17 (decision 0050): names, notes, merges, pictures and spam marks of contacts.
+        // Stage 17 (decision 0050): names, notes, merges and spam marks of contacts.
         // Stage 19 (decision 0056): contact groups too.
-        if any(&["contact", "contactPicture", "blockedSender", "contactList"]) {
+        if any(&["contact", "blockedSender", "contactList"]) {
             self.emit_event(CoreEvent::ContactsChanged);
         }
         if any(&["senderRule"]) {

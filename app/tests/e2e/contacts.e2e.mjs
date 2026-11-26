@@ -5,11 +5,9 @@
 // 1. Two mails from "Pushy <offers@spam.example>" and one from Grace with Dave in Cc and a
 //    Reply-To are appended to the inbox through IMAP; every address becomes a contact.
 // 2. Search: by name, by address and by domain, in the contacts view.
-// 3. Picture: a PNG dropped on the window (the e2e hook records the drop and announces it as the
-//    system does) opens the cropper with the image the helper encoded; the arrow keys move it,
-//    plus zooms, "Save picture" stores the square. The picture shows in the contact's page, the
-//    contact list and the inbox row of Grace's mail; every image is a JPEG `data:` URI the core
-//    wrote, never the file.
+// 3. No pictures (stage 22, decision 0072): the contact's page, the contact list and the inbox row
+//    of Grace's mail show no picture and no initials; a PNG dropped on the window while the contact
+//    is open (the e2e hook records the drop and announces it as the system does) changes nothing.
 // 4. Mark as spam: Pushy is blocked, the two messages go to Junk on the server through the
 //    outbox; "Undo" unblocks and brings them back to the inbox.
 // 5. No CSP violation in the main frame during all of it.
@@ -96,7 +94,7 @@ const viewState = () =>
     const view = document.querySelector('[data-testid="contacts-view"]');
     if (!view) return null;
     const detail = view.querySelector('[data-testid="contact-detail"]');
-    const pictureOf = (root) => root?.querySelector('[data-testid="avatar-picture"]')?.getAttribute("src")?.slice(0, 32) ?? null;
+    const pictureOf = (root) => (root?.querySelector('img, [data-testid="avatar"]') ? "picture" : null);
     return {
       rows: [...view.querySelectorAll('[data-testid="contact-row"]')].map((row) => ({
         key: row.getAttribute("data-contact"),
@@ -107,7 +105,8 @@ const viewState = () =>
         ? {
             name: detail.querySelector('[data-testid="contact-detail-name"]')?.textContent ?? null,
             email: detail.querySelector('[data-testid="contact-detail-email"]')?.textContent ?? null,
-            picture: pictureOf(detail.querySelector('[data-testid="contact-picture-area"]')),
+            picture: pictureOf(detail.querySelector("header")),
+            pictureArea: detail.querySelector('[data-testid="contact-picture-area"]') !== null,
             spam: Boolean(detail.querySelector('[data-testid="contact-spam"]')),
           }
         : null,
@@ -232,44 +231,33 @@ describe("stage 17: contacts", () => {
     report.screenshots.push(await screenshot("contacts-search"));
   });
 
-  it("sets a picture from a dropped file; it shows in the page, the list and the inbox", async () => {
+  it("shows no picture in the page, the list or the inbox; a dropped image changes nothing", async () => {
     await search(`grace-${RUN}`);
-    await waitForView((s) => s?.detail?.email === GRACE_ADDRESS, "grace open");
+    const open = await waitForView((s) => s?.detail?.email === GRACE_ADDRESS, "grace open");
+    assert.equal(open.detail.picture, null, "the contact's page shows a picture");
+    assert.equal(open.detail.pictureArea, false, "the contact's page has a picture area");
+    assert.equal(open.rows.find((r) => r.key === GRACE_ADDRESS)?.picture ?? null, null, "the list shows a picture");
     const file = path.join(workDir, "grace.png");
     fs.writeFileSync(file, png(900, 600));
     const dropped = await invoke("e2e_drop_files", { paths: [file] });
     assert.ok(!("failure" in dropped), JSON.stringify(dropped));
-    const cropping = await waitForView((s) => s?.cropper !== null && s.cropperImage !== null, "the cropper did not open");
-    assert.match(cropping.cropperImage, /^data:image\/jpeg;base64,/);
-    assert.equal(cropping.cropper, "150,0,600");
-    // Keyboard: focus the square, zoom in, move right and down.
-    await testId("picture-crop-area").click();
-    await browser.keys(["+"]);
-    await browser.keys(["ArrowRight"]);
-    await browser.keys(["ArrowDown"]);
-    const moved = await waitForView((s) => s?.cropper !== "150,0,600", "the square did not move");
-    report.steps.crop = moved.cropper;
-    report.screenshots.push(await screenshot("contacts-cropper"));
-    await testId("picture-save").click();
-    const saved = await waitForView((s) => s?.cropper === null && s.detail?.picture !== null, "the picture did not show");
-    assert.match(saved.detail.picture, /^data:image\/jpeg;base64,/);
-    const listed = await waitForView((s) => s?.rows.find((r) => r.key === GRACE_ADDRESS)?.picture != null, "no picture in the list");
-    report.steps.picture = { detail: saved.detail, row: listed.rows.find((r) => r.key === GRACE_ADDRESS) };
-    report.screenshots.push(await screenshot("contacts-picture"));
+    await browser.pause(1000);
+    const after = await viewState();
+    assert.equal(after.cropper, null, "a cropper opened");
+    assert.equal(after.detail?.picture ?? null, null, "the drop gave the contact a picture");
     const stored = await coreCall("get_contact", { email: GRACE_ADDRESS });
-    assert.ok(stored.picture !== null, "the core keeps the picture");
+    assert.equal("picture" in stored, false, "the core still has a picture field");
+    report.steps.noPicture = { detail: after.detail, row: after.rows.find((r) => r.key === GRACE_ADDRESS) };
+    report.screenshots.push(await screenshot("contacts-no-picture"));
 
-    // The inbox row of Grace's mail shows it too.
+    // The inbox row of Grace's mail: the mark column and her name, no avatar.
     await openView("inbox");
     const row = await $(`//*[@role="option" or @role="treeitem"][contains(., "Compilers ${RUN}")]`);
     await row.waitForExist({ timeout: 20000 });
-    await browser.waitUntil(async () => (await row.$('[data-testid="avatar-picture"]').isExisting()), {
-      timeout: 15000,
-      timeoutMsg: "the inbox row shows no picture",
-    });
-    const src = await row.$('[data-testid="avatar-picture"]').getAttribute("src");
-    assert.match(src, /^data:image\/jpeg;base64,/);
-    report.screenshots.push(await screenshot("contacts-inbox-picture"));
+    assert.equal(await row.$('[data-testid="avatar"]').isExisting(), false, "the inbox row has an avatar");
+    assert.equal(await row.$("img").isExisting(), false, "the inbox row has an image");
+    assert.equal(await row.$('[data-testid="row-mark"]').isExisting(), true, "the inbox row has no mark column");
+    report.screenshots.push(await screenshot("contacts-inbox-row"));
     await openView("contacts");
     await testId("contacts-view").waitForExist({ timeout: 10000 });
   });

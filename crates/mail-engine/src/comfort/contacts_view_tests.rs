@@ -1,17 +1,9 @@
 //! Stage 17, block B (decision 0050) through `AppCore` with the fake server: every address of
-//! received mail becomes a contact with its kind, notes, the picture pipeline (encoded, cut,
-//! stored, refused when crafted or too large, never decoded here when a helper is configured),
-//! a contact's mail, "mark as spam" with the move to junk, read-only accounts and undo, and
-//! the settings sync records of what the user set.
+//! received mail becomes a contact with its kind, notes, a contact's mail, "mark as spam" with
+//! the move to junk, read-only accounts and undo, and the settings sync records of what the
+//! user set. Contacts have no pictures since stage 22 (decision 0072).
 
-use std::path::PathBuf;
-
-use image::codecs::png::PngEncoder;
-use image::{Rgba, RgbaImage};
-use mail_model::{
-    ContactFilter, ContactKind, ErrorCode, IpcError, MAX_CONTACT_PICTURE_FILE_BYTES, MailboxRole,
-    PictureCrop, SpamUndo,
-};
+use mail_model::{ContactFilter, ContactKind, ErrorCode, IpcError, MailboxRole, SpamUndo};
 
 use super::*;
 
@@ -36,17 +28,6 @@ Subject: Last chance\r\nMessage-ID: <win-3@spam.example>\r\nContent-Type: text/p
 
 fn code(err: mail_model::CoreError) -> ErrorCode {
     IpcError::from(err).code
-}
-
-fn png(width: u32, height: u32) -> Vec<u8> {
-    let picture = RgbaImage::from_fn(width, height, |x, _| {
-        Rgba([u8::try_from(x % 256).unwrap_or(0), 120, 60, 255])
-    });
-    let mut out = Vec::new();
-    picture
-        .write_with_encoder(PngEncoder::new(&mut out))
-        .expect("png");
-    out
 }
 
 fn add_junk(server: &FakeServer) {
@@ -133,11 +114,11 @@ async fn every_address_of_received_mail_becomes_a_contact_with_its_kind() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
+async fn notes_are_set_kept_and_synchronised() {
     let mut h = Harness::new(FakeServer::new()).await;
     h.deliver(TEAM).await;
     let carol = contact_of(&h, "carol@work.example").await;
-    assert_eq!((carol.note.as_deref(), carol.picture), (None, None));
+    assert_eq!(carol.note.as_deref(), None);
 
     let noted = h
         .core
@@ -155,64 +136,8 @@ async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
         .expect_err("too long");
     assert_eq!(code(refused), ErrorCode::InvalidArgument);
 
-    // A file the user chose: read by the core, encoded for the cropper, cut to a square.
-    let dir = h.dir.path().join("pictures");
-    std::fs::create_dir_all(&dir).expect("dir");
-    let file = dir.join("carol.png");
-    std::fs::write(&file, png(1600, 900)).expect("write");
-    let source = h.core.load_contact_picture(file).await.expect("source");
-    assert_eq!((source.width, source.height), (1024, 576));
-    assert!(source.data_url.starts_with("data:image/jpeg;base64,"));
-    let with_picture = h
-        .core
-        .set_contact_picture(
-            "carol@work.example".into(),
-            source.token.clone(),
-            PictureCrop {
-                x: 200,
-                y: 0,
-                size: 576,
-            },
-        )
-        .await
-        .expect("picture");
-    let revision = with_picture.picture.expect("revision");
-    let shown = h
-        .core
-        .get_contact_picture("carol@work.example".into())
-        .await
-        .expect("read")
-        .expect("picture");
-    assert_eq!(shown.revision, revision);
-    assert!(shown.data_url.starts_with("data:image/jpeg;base64,/9j/"));
-    // The token is used up.
-    let expired = h
-        .core
-        .set_contact_picture(
-            "carol@work.example".into(),
-            source.token,
-            PictureCrop {
-                x: 0,
-                y: 0,
-                size: 10,
-            },
-        )
-        .await
-        .expect_err("used");
-    assert_eq!(code(expired), ErrorCode::NotFound);
-    let refs = h.core.list_contact_pictures().await.expect("refs");
-    assert_eq!(refs.len(), 1);
-    assert!(refs[0].emails.contains(&"carol@work.example".to_owned()));
-
-    // After a restart the picture and the note are still there.
+    // After a restart the note is still there.
     let h = h.restart(0).await;
-    let again = h
-        .core
-        .get_contact_picture("carol@work.example".into())
-        .await
-        .expect("read")
-        .expect("kept");
-    assert_eq!(again, shown);
     assert_eq!(
         h.core
             .get_contact("carol@work.example".into())
@@ -223,7 +148,8 @@ async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
         Some("Met at the fair")
     );
 
-    // What the user set travels through the settings sync; what the directory counts does not.
+    // What the user set travels through the settings sync; what the directory counts does not,
+    // and no picture record exists any more (decision 0072).
     let store = h.core.store_for_tests().clone();
     let records = store.sync_records().await.expect("records");
     let contact_records: Vec<_> = records
@@ -231,19 +157,13 @@ async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
         .filter(|r| r.kind == "contact" || r.kind == "contactPicture")
         .map(|r| (r.kind.as_str(), r.id.as_str(), r.content.clone()))
         .collect();
-    assert_eq!(contact_records.len(), 2, "{contact_records:?}");
     assert_eq!(
-        contact_records[0],
-        (
+        contact_records,
+        [(
             "contact",
             "carol@work.example",
             Some(serde_json::json!({ "note": "Met at the fair" }))
-        )
-    );
-    let picture = contact_records[1].2.as_ref().expect("content");
-    assert!(
-        crate::contacts_view::is_picture_record(picture["jpeg"].as_str().expect("jpeg")),
-        "{picture}"
+        )]
     );
     assert!(
         !records
@@ -251,99 +171,6 @@ async fn notes_and_pictures_are_set_shown_removed_and_synchronised() {
             .any(|r| r.kind == "contact" && r.id == "dave@work.example"),
         "contacts nobody edited are not synchronised"
     );
-
-    let removed = h
-        .core
-        .remove_contact_picture("carol@work.example".into())
-        .await
-        .expect("remove");
-    assert_eq!(removed.picture, None);
-    assert!(
-        h.core
-            .get_contact_picture("carol@work.example".into())
-            .await
-            .expect("read")
-            .is_none()
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn crafted_large_and_foreign_files_are_refused_with_typed_errors() {
-    let h = Harness::new(FakeServer::new()).await;
-    let dir = h.dir.path().join("pictures");
-    std::fs::create_dir_all(&dir).expect("dir");
-    // A PNG header that claims 60,000 × 60,000 pixels.
-    let mut crafted = png(1, 1);
-    crafted[16..20].copy_from_slice(&60_000u32.to_be_bytes());
-    crafted[20..24].copy_from_slice(&60_000u32.to_be_bytes());
-    let mut cut = png(40, 40);
-    cut.truncate(60);
-    let cases: [(&str, Vec<u8>, &[ErrorCode]); 3] = [
-        (
-            "crafted.png",
-            crafted,
-            &[ErrorCode::PictureTooLarge, ErrorCode::PictureDamaged],
-        ),
-        ("cut.png", cut, &[ErrorCode::PictureDamaged]),
-        (
-            "vector.svg",
-            b"<svg/>".to_vec(),
-            &[ErrorCode::PictureUnsupported],
-        ),
-    ];
-    for (name, bytes, codes) in cases {
-        let path = dir.join(name);
-        std::fs::write(&path, bytes).expect("write");
-        let err = h
-            .core
-            .load_contact_picture(path)
-            .await
-            .expect_err("refused");
-        assert!(codes.contains(&code(err.clone())), "{name}: {err:?}");
-    }
-    // Over the size limit: refused before it is read.
-    let big = dir.join("big.jpg");
-    std::fs::File::create(&big)
-        .and_then(|f| f.set_len(u64::from(MAX_CONTACT_PICTURE_FILE_BYTES) + 1))
-        .expect("sparse file");
-    let err = h.core.load_contact_picture(big).await.expect_err("large");
-    assert_eq!(code(err), ErrorCode::PictureTooLarge);
-    let err = h
-        .core
-        .load_contact_picture(dir.join("missing.png"))
-        .await
-        .expect_err("missing");
-    assert_eq!(code(err), ErrorCode::PictureUnsupported);
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn with_a_helper_configured_nothing_is_decoded_in_the_app() {
-    let dir = TempDir::new().expect("dir");
-    let mut services = CoreServices::with_connector(
-        Credentials::new(Arc::new(MemorySecretStore::new())),
-        FakeConnector(FakeServer::new()),
-    );
-    services.reading.preview_helper = Some(PathBuf::from("/nonexistent/mail-mcp"));
-    let core = AppCore::start(
-        CoreConfig {
-            data_dir: dir.path().join("data"),
-            build: BuildInfo {
-                version: "0".into(),
-                commit: None,
-                build_date: None,
-            },
-        },
-        services,
-    )
-    .await;
-    let file = dir.path().join("fine.png");
-    std::fs::write(&file, png(20, 20)).expect("write");
-    let err = core
-        .load_contact_picture(file)
-        .await
-        .expect_err("no helper");
-    assert_eq!(code(err), ErrorCode::PictureUnsupported);
-    core.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

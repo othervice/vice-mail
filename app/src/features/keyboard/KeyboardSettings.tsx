@@ -20,6 +20,7 @@ import {
 } from "./bindings";
 import { useCommandLabel } from "./labels";
 import { useUiPreferencesLoad } from "./useUiPreferencesSync";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 type Status = { tone: "ok" | "problem"; text: string } | null;
 
@@ -234,8 +235,13 @@ export function KeyboardSettings() {
       )}
       {saveError && <ErrorNotice context={t("keyboard.settings.saveFailed")} error={saveError} data-testid="shortcut-save-error" />}
       {groups.map((group) => (
-        <section key={group.id} aria-labelledby={`${descriptionId}-${group.id}`} className="flex flex-col">
-          <h3 id={`${descriptionId}-${group.id}`} className="text-14 font-semibold text-primary">
+        // Stage 22 (decision 0073): the search finds the groups by their headings.
+        <section key={group.id} aria-labelledby={`${descriptionId}-${group.id}`} className="flex flex-col" {...SETTING_BLOCK}>
+          <h3
+            id={`${descriptionId}-${group.id}`}
+            {...settingAnchor(t(`keyboard.settings.groups.${group.id}`))}
+            className={cx("text-14 font-semibold text-primary", SETTING_ANCHOR_CLASS)}
+          >
             {t(`keyboard.settings.groups.${group.id}`)}
           </h3>
           <ul className="flex flex-col">

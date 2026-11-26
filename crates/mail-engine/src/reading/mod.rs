@@ -159,8 +159,6 @@ pub(crate) struct Reading<C: MailConnector> {
     listener: Mutex<Option<JoinHandle<()>>>,
     /// Stage 9: `.eml` files opened read-only (decision 0027).
     eml: eml::EmlFiles,
-    /// Stage 17: images chosen for contact pictures, waiting for their square (0050).
-    pub(crate) picture_sources: crate::contacts_view::PictureSources,
     /// Stage 20: whether links get cleaned, as last read from the settings (for the links of
     /// AI results, which are remembered without a store read).
     clean_links: AtomicBool,
@@ -221,7 +219,6 @@ impl<C: MailConnector + 'static> Reading<C> {
             prefetch: Prefetcher::default(),
             listener: Mutex::default(),
             eml: eml::EmlFiles::default(),
-            picture_sources: crate::contacts_view::PictureSources::default(),
             clean_links: AtomicBool::new(true),
             quotas: Mutex::default(),
         });
@@ -1205,11 +1202,6 @@ pub(crate) fn preview_kind_of(
 }
 
 impl<C: MailConnector + 'static> Reading<C> {
-    /// Stage 17: the helper of previews and images, also for contact pictures (0050).
-    pub(crate) fn preview_helper(&self) -> Option<&Path> {
-        self.preview_helper.as_deref()
-    }
-
     /// Decodes and encodes a preview: images and PDF in the helper process when there is one
     /// (finding C-2, decision 0043), text and everything without a helper on the blocking pool.
     pub(crate) async fn render_preview(

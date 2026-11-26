@@ -23,6 +23,8 @@
 //!   recognised as deleted; the deletion is then announced again with a fresh tombstone.
 //! - **Deferred entries:** versions further ahead than [`MAX_CLOCK_DRIFT_MS`] leave their whole
 //!   record untouched until the local clock catches up.
+//! - **Retired kinds** (decision 0072): entries of a kind an older version wrote and this one
+//!   no longer has are ignored like rejected ones, but not reported to the user.
 //! - **Rejected entries** never count as a version of their record and are reported. Damaged
 //!   or misplaced ones (authentication failed, header mismatch) are deleted once a valid winner
 //!   of their record is stored; entries of another key, of a newer app version or with
@@ -115,6 +117,9 @@ pub enum Notice {
     /// Over the limits of this pass ([`FetchLimits::max_entries`], [`FetchLimits::max_bytes`]):
     /// not downloaded; its record waits for the next pass.
     Postponed { handle: EntryHandle, size: u64 },
+    /// Of a kind this version retired (decision 0072): ignored and left on the server for
+    /// devices with an older version; not reported to the user, never a version of anything.
+    Retired { handle: EntryHandle },
 }
 
 impl Notice {
@@ -124,7 +129,8 @@ impl Notice {
             | Self::Deferred { handle, .. }
             | Self::Rejected { handle, .. }
             | Self::TooLarge { handle, .. }
-            | Self::Postponed { handle, .. } => *handle,
+            | Self::Postponed { handle, .. }
+            | Self::Retired { handle } => *handle,
         }
     }
 
@@ -371,6 +377,11 @@ impl<'a> Planner<'a> {
                     EntryState::TooLarge => {}
                     EntryState::Fetch => match opened.remove(&entry.handle) {
                         None => {}
+                        Some(Err(OpenError::Retired(_))) => {
+                            plan.notices.push(Notice::Retired {
+                                handle: entry.handle,
+                            });
+                        }
                         Some(Err(error)) => {
                             if matches!(error, OpenError::Damaged | OpenError::HeaderMismatch(_)) {
                                 group.garbage.push(entry.handle);

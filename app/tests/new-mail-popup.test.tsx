@@ -30,7 +30,6 @@ function card(id: number, overrides: Partial<NewMailCard> = {}): NewMailCard {
       senderEmail: `s${String(id)}@example.org`,
       subject: `Subject ${String(id)}`,
       snippet: `Snippet of message ${String(id)} with enough words for two lines`,
-      picture: null,
     },
     account: null,
     writesEnabled: true,
@@ -119,7 +118,7 @@ afterEach(() => {
 });
 
 describe("the new-mail popup", () => {
-  it("shows a card with picture or initials, sender, subject, snippet, time and both buttons", async () => {
+  it("shows a card with sender, subject, snippet, time and both buttons, without a picture", async () => {
     const f = fake({ cards: [card(1)] });
     renderPopup();
     const [only] = await screen.findAllByTestId("popup-card");
@@ -130,7 +129,9 @@ describe("the new-mail popup", () => {
     expect(screen.getByRole("article", { name: "Sender 1" })).toBe(only);
     expect(article.getByTestId("popup-subject").textContent).toBe("Subject 1");
     expect(article.getByTestId("popup-snippet").textContent).toContain("Snippet of message 1");
-    expect(article.getByTestId("popup-avatar").textContent).toBe("S1");
+    // Stage 22 (decision 0072): no picture and no initials; the sender's name leads the card.
+    expect(article.queryByTestId("popup-avatar")).toBeNull();
+    expect(only.querySelector("img")).toBeNull();
     expect(only.querySelector("time")?.textContent).toMatch(/\d/);
     expect(article.getByRole("button", { name: "Read" })).toBeTruthy();
     expect(article.getByRole<HTMLButtonElement>("button", { name: "Delete" }).disabled).toBe(false);
@@ -144,20 +145,17 @@ describe("the new-mail popup", () => {
     expect(f.calls.map((c) => c.cmd)).toContain("get_new_mail_popup");
   });
 
-  it("shows the contact's picture where there is one, and the account with several accounts", async () => {
-    const picture = "data:image/jpeg;base64,/9j/AA==";
+  it("names the sender by address without a name, and the account with several accounts", async () => {
     fake({
       cards: [
         card(1, {
-          content: { senderName: null, senderEmail: "grace@example.org", subject: "", snippet: null, picture },
+          content: { senderName: null, senderEmail: "grace@example.org", subject: "", snippet: null },
           account: { name: "Work", color: 2 },
         }),
       ],
     });
     renderPopup();
-    const avatar = await screen.findByTestId("popup-avatar");
-    expect(avatar.querySelector("img")?.getAttribute("src")).toBe(picture);
-    expect(screen.getByTestId("popup-sender").textContent).toBe("grace@example.org");
+    expect((await screen.findByTestId("popup-sender")).textContent).toBe("grace@example.org");
     expect(screen.getByTestId("popup-subject").textContent).toBe("(no subject)");
     expect(screen.queryByTestId("popup-snippet")).toBeNull();
     expect(screen.getByTestId("popup-account").textContent).toBe("In Work");

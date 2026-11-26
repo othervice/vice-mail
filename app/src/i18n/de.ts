@@ -1071,6 +1071,17 @@ export const de: Translation = {
     // Stage 10
     contacts: { title: "Kontakte" },
     sections: "Bereiche der Einstellungen",
+    // Stufe 22 (Entscheidung 0073): die Einstellungen durchsuchen.
+    search: {
+      label: "Einstellungen durchsuchen",
+      placeholder: "Einstellungen durchsuchen\u00a0…",
+      results: "Gefundene Einstellungen",
+      count_one: "{{count}} Einstellung gefunden",
+      count_other: "{{count}} Einstellungen gefunden",
+      none: "Keine Einstellung zu „{{query}}“ gefunden.",
+      clear: "Suche leeren",
+      section: "Die ganze Seite",
+    },
     general: {
       title: "Allgemein",
       language: {
@@ -2841,7 +2852,7 @@ export const de: Translation = {
   },
   // Stage 10: the local contact directory (Settings → Contacts).
   contacts: {
-    intro: "Auf diesem Gerät aus jeder Adresse deiner gesendeten und empfangenen Mails erstellt. Bilder, Notizen und Spam-Markierungen findest du unter Kontakte, mögliche Doppelte hier.",
+    intro: "Auf diesem Gerät aus jeder Adresse deiner gesendeten und empfangenen Mails erstellt. Notizen und Spam-Markierungen findest du unter Kontakte, mögliche Doppelte hier.",
     // Stufe 17 (Entscheidung 0050).
     openView: "Kontakte öffnen",
     search: "Kontakte durchsuchen",
@@ -2942,28 +2953,6 @@ export const de: Translation = {
       recentLoading: "Mails werden geladen\u00a0…",
       recentEmpty: "Auf diesem Gerät liegt keine Mail mit diesem Kontakt.",
       recentFailed: "Die letzten Mails konnten nicht geladen werden.",
-      picture: {
-        choose: "Bild wählen\u00a0…",
-        change: "Bild ändern\u00a0…",
-        remove: "Bild entfernen",
-        loading: "Bild wird gelesen\u00a0…",
-        dropHint: "oder ein Bild hierher ziehen",
-        dropping: "Lass das Bild los, um es zu verwenden",
-        failed: "Das Bild konnte nicht verwendet werden.",
-        removeFailed: "Das Bild konnte nicht entfernt werden.",
-      },
-      cropper: {
-        title: "Ausschnitt wählen",
-        hint: "Ziehe das Bild oder verschiebe es mit den Pfeiltasten; Plus und Minus zoomen. Eingabe speichert, Escape bricht ab.",
-        area: "Bild von {{name}}",
-        zoom: "Zoom",
-        zoomIn: "Vergrößern",
-        zoomOut: "Verkleinern",
-        save: "Bild speichern",
-        saving: "Wird gespeichert\u00a0…",
-        cancel: "Abbrechen",
-        failed: "Das Bild konnte nicht gespeichert werden.",
-      },
       spam: {
         moveTitle_one: "Auch {{count}} vorhandene Mail in den Spam-Ordner verschieben?",
         moveTitle_other: "Auch {{count}} vorhandene Mails in den Spam-Ordner verschieben?",
@@ -3708,19 +3697,6 @@ export const de: Translation = {
         title: "Unter dieser Adresse wurde kein JMAP-Dienst gefunden.",
         hint: "Prüfe Servername und Port. Ein JMAP-Server antwortet unter https://server/.well-known/jmap. Bietet dein Anbieter kein JMAP an, wähle IMAP und SMTP in den Server-Einstellungen.",
       },
-      // Stufe 17 (Entscheidung 0050): Kontaktbilder.
-      picture_too_large: {
-        title: "Das Bild ist zu groß.",
-        hint: "Wähle eine Bilddatei mit höchstens 20 MB und höchstens 64 Megapixeln.",
-      },
-      picture_unsupported: {
-        title: "Diese Datei lässt sich nicht als Bild verwenden.",
-        hint: "Wähle ein PNG-, JPEG-, GIF- oder WebP-Bild.",
-      },
-      picture_damaged: {
-        title: "Das Bild konnte nicht gelesen werden.",
-        hint: "Die Datei ist vielleicht beschädigt. Wähle ein anderes Bild.",
-      },
       // Stufe 20 (Entscheidung 0060).
       over_quota: {
         title: "Das Postfach auf dem Server ist voll.",
@@ -4441,7 +4417,7 @@ export const de: Translation = {
       exportGroup: "Die Gruppe {{name}} exportieren\u00a0…",
       imported_one: "{{count}} Karte gelesen",
       imported_other: "{{count}} Karten gelesen",
-      importDetail: "Neue Kontakte: {{created}}, ergänzt: {{updated}}, Gruppen: {{lists}}, Bilder: {{pictures}}.",
+      importDetail: "Neue Kontakte: {{created}}, ergänzt: {{updated}}, Gruppen: {{lists}}.",
       problems_one: "{{count}} Karte oder Zeile konnte nicht ganz übernommen werden.",
       problems_other: "{{count}} Karten oder Zeilen konnten nicht ganz übernommen werden.",
       exported_one: "{{count}} Karte gesichert",

@@ -80,3 +80,10 @@ könnte; ihre schmale Auswahlspalte ist eine Spalte der Tabelle mit Platz im Kop
 `AvatarMark` durch die frühere Spalte (`SelectionMark` vor dem Avatar) ersetzen und
 `--ui-row-lead` auf `--ui-space-3` mit dem alten `--ui-tree-line-start`; gemischte Listen ohne
 `renderQuickActions` und `onRowMenu` rendern.
+
+## Nachtrag 26.11.2026
+
+Seit Stufe 22 (Entscheidung 0072) gibt es keinen Avatar mehr. Punkt und Kästchen stehen in einer
+schmalen Markenspalte am Zeilenanfang (16 px nach dem Vorlauf, wie in der Tabelle; beim Überfahren
+das Kästchen an der Stelle des Punkts). Was hier der Ring trug (Punkt 2), trägt jetzt das
+Kontoetikett, das beim Überfahren vor den Schnellaktionen stehen bleibt.

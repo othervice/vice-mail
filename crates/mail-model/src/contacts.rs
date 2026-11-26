@@ -5,8 +5,9 @@
 //! the contact that was kept is the preferred one). Contacts come from sent and received mail
 //! (decision 0016). Since stage 17 every address of From, To, Cc and Reply-To becomes one;
 //! list and system addresses (newsletters, `noreply@`, `MAILER-DAEMON@`) are marked
-//! ([`ContactKind`]) and can be left out. A contact can have a note and a picture the user
-//! chose, and can be marked as spam (its addresses are blocked senders, stage 16).
+//! ([`ContactKind`]) and can be left out. A contact can have a note and can be marked as spam
+//! (its addresses are blocked senders, stage 16). Contacts have no pictures (stage 22, decision
+//! 0072).
 
 use serde::{Deserialize, Serialize};
 use specta_typescript::Number;
@@ -21,18 +22,6 @@ pub const MAX_DUPLICATE_SCAN: u32 = 20_000;
 
 /// Stage 17: longest note of a contact, in characters.
 pub const MAX_CONTACT_NOTE_CHARS: usize = 1_000;
-
-/// Stage 17: largest image file read for a contact picture.
-pub const MAX_CONTACT_PICTURE_FILE_BYTES: u32 = 20 * 1024 * 1024;
-
-/// Stage 17: width and height of a stored contact picture in pixels (a square JPEG).
-pub const CONTACT_PICTURE_SIZE: u32 = 256;
-
-/// Stage 17: largest stored contact picture (JPEG bytes); also what one sync record carries.
-pub const MAX_CONTACT_PICTURE_BYTES: usize = 40 * 1024;
-
-/// Stage 17: longest side of the image the cropper shows.
-pub const CONTACT_PICTURE_SOURCE_SIZE: u32 = 1_024;
 
 /// Stage 17: most recent messages [`ContactMessages`] lists.
 pub const MAX_CONTACT_MESSAGES: u32 = 50;
@@ -112,9 +101,6 @@ pub struct ContactEntry {
     pub kind: ContactKind,
     /// Stage 17: the note the user wrote (synchronised).
     pub note: Option<String>,
-    /// Stage 17: the revision of the contact's picture (`getContactPicture`), null without one.
-    #[specta(type = Option<Number>)]
-    pub picture: Option<i64>,
     /// Stage 17: at least one address is blocked (marked as spam).
     pub blocked: bool,
 }
@@ -130,50 +116,6 @@ pub enum ContactFilter {
     People,
     /// Every contact.
     All,
-}
-
-/// Stage 17: an image the user chose for a contact, re-encoded in the helper and at most
-/// [`CONTACT_PICTURE_SOURCE_SIZE`] pixels per side, for the cropper. `token` names it in
-/// `setContactPicture` for a few minutes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ContactPictureSource {
-    pub token: String,
-    /// `data:image/jpeg;base64,…`, written by the helper.
-    pub data_url: String,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Stage 17: the square the user cut out, in pixels of [`ContactPictureSource`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PictureCrop {
-    pub x: u32,
-    pub y: u32,
-    pub size: u32,
-}
-
-/// Stage 17: a contact's picture as the UI shows it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ContactPicture {
-    /// `data:image/jpeg;base64,…`, written by the helper.
-    pub data_url: String,
-    #[specta(type = Number)]
-    pub revision: i64,
-}
-
-/// Stage 17: which addresses show a picture: every address of a contact that has one, lower
-/// case (as written and with the ASCII domain), and the picture's revision. `key` is the
-/// contact's (for `getContactPicture`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ContactPictureRef {
-    pub key: String,
-    pub emails: Vec<String>,
-    #[specta(type = Number)]
-    pub revision: i64,
 }
 
 /// Stage 17: the newest messages from or to a contact (any of its addresses), newest first.
@@ -311,19 +253,6 @@ pub enum ContactRequestError {
     /// characters other than line breaks and tabs.
     #[error("not a usable note")]
     InvalidNote,
-    /// Stage 17: the image file is larger than [`MAX_CONTACT_PICTURE_FILE_BYTES`], or larger
-    /// than the decoder's limits, or the helper stopped over its time or memory limit.
-    #[error("the picture is too large: {0}")]
-    PictureTooLarge(String),
-    /// Stage 17: not a PNG, JPEG, GIF or WebP image (by its bytes).
-    #[error("not a picture the app reads: {0}")]
-    PictureUnsupported(String),
-    /// Stage 17: the image could not be decoded (damaged, or crafted).
-    #[error("the picture could not be read: {0}")]
-    PictureDamaged(String),
-    /// Stage 17: the chosen image is no longer held (chosen too long ago); choose it again.
-    #[error("the chosen picture expired")]
-    PictureExpired,
 }
 
 impl ContactRequestError {
@@ -334,10 +263,6 @@ impl ContactRequestError {
             Self::SameContact | Self::InvalidName | Self::NotMerged(_) | Self::InvalidNote => {
                 ErrorCode::InvalidArgument
             }
-            Self::PictureTooLarge(_) => ErrorCode::PictureTooLarge,
-            Self::PictureUnsupported(_) => ErrorCode::PictureUnsupported,
-            Self::PictureDamaged(_) => ErrorCode::PictureDamaged,
-            Self::PictureExpired => ErrorCode::NotFound,
         }
     }
 
@@ -349,10 +274,6 @@ impl ContactRequestError {
             Self::InvalidName => "Enter a name (not an email address).",
             Self::NotMerged(_) => "This address is not merged with another one.",
             Self::InvalidNote => "The note is too long or contains characters it cannot have.",
-            Self::PictureTooLarge(_) => "The picture is too large.",
-            Self::PictureUnsupported(_) => "Choose a PNG, JPEG, GIF or WebP picture.",
-            Self::PictureDamaged(_) => "The picture could not be read.",
-            Self::PictureExpired => "Choose the picture again.",
         }
     }
 
@@ -390,13 +311,5 @@ mod tests {
             assert_eq!(ContactKind::from_code(kind.code()), Some(kind));
         }
         assert_eq!(ContactKind::from_code(3), None);
-        assert_eq!(
-            ContactRequestError::PictureDamaged("x".into()).code(),
-            ErrorCode::PictureDamaged
-        );
-        assert_eq!(
-            ContactRequestError::PictureExpired.code(),
-            ErrorCode::NotFound
-        );
     }
 }

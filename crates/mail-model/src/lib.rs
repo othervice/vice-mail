@@ -127,12 +127,10 @@ pub use contact_lists::{
     VcardImportProblemKind, VcardImportReport, VcardVersionChoice,
 };
 pub use contacts::{
-    CONTACT_PICTURE_SIZE, CONTACT_PICTURE_SOURCE_SIZE, ContactAddressInfo, ContactDuplicate,
-    ContactEntry, ContactFilter, ContactKind, ContactMergeRequest, ContactMessages, ContactPage,
-    ContactPicture, ContactPictureRef, ContactPictureSource, ContactRequestError, DuplicateReason,
-    MAX_CONTACT_MESSAGES, MAX_CONTACT_NOTE_CHARS, MAX_CONTACT_PAGE, MAX_CONTACT_PICTURE_BYTES,
-    MAX_CONTACT_PICTURE_FILE_BYTES, MAX_DUPLICATE_SCAN, PictureCrop, SpamMailCount, SpamMark,
-    SpamMove, SpamUndo, SpamUndone,
+    ContactAddressInfo, ContactDuplicate, ContactEntry, ContactFilter, ContactKind,
+    ContactMergeRequest, ContactMessages, ContactPage, ContactRequestError, DuplicateReason,
+    MAX_CONTACT_MESSAGES, MAX_CONTACT_NOTE_CHARS, MAX_CONTACT_PAGE, MAX_DUPLICATE_SCAN,
+    SpamMailCount, SpamMark, SpamMove, SpamUndo, SpamUndone,
 };
 pub use desktop::{
     Autostart, BackgroundSettings, DesktopTexts, LocalTime, NotificationPause,

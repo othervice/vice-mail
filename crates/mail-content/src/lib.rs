@@ -46,7 +46,6 @@ mod calendar;
 mod classify;
 mod colors;
 mod compose;
-mod contact_picture;
 mod contacts;
 mod css;
 mod dom;
@@ -93,7 +92,6 @@ pub use compose::{
     prepare_forward, prepare_reply, receipt_request, receipt_subject, receipt_text,
     reply_recipients, reply_references, reply_subject, strip_subject_prefixes, text_to_editor_html,
 };
-pub use contact_picture::{PictureJpeg, is_jpeg, picture_crop, picture_source};
 pub use contacts::{
     Contact, ContactAddress, ContactBook, ContactError, ContactMatch, ContactMerge, Direction,
     DuplicateKind, DuplicateSuggestion, HALF_LIFE_SECS, MAX_NAME_CHARS, MAX_NAMES_PER_CONTACT,
@@ -150,8 +148,8 @@ pub use trackers::{
 };
 pub use vcard::{
     MAX_VCARD_CARDS, MAX_VCARD_EMAILS, MAX_VCARD_FILE_BYTES, MAX_VCARD_LINE_BYTES,
-    MAX_VCARD_MEMBERS, MAX_VCARD_PHOTO_BYTES, VcardCard, VcardFile, VcardKind, VcardMember,
-    VcardProblem, VcardProblemKind, VcardVersion, read_vcards, write_vcards,
+    MAX_VCARD_MEMBERS, VcardCard, VcardFile, VcardKind, VcardMember, VcardProblem,
+    VcardProblemKind, VcardVersion, read_vcards, write_vcards,
 };
 pub use visible::{
     HIDDEN_OPACITY, MATCH_BUDGET, MIN_BOX_PX, MIN_CONTRAST, MIN_FONT_PX, OFFSCREEN_PX,

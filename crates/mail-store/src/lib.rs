@@ -105,7 +105,7 @@ pub use contacts_dir::{
     ContactCursor, MAX_CONTACT_ROWS, MergeOutcome, SeparateOutcome, StoredContactGroup,
     StoredContactPage,
 };
-pub use contacts_view::{KindRow, SenderLocation, StoredPicture};
+pub use contacts_view::{KindRow, SenderLocation};
 pub use diagnostics::{AccountStats, DatabaseStats};
 pub use error::StoreError;
 pub use folders::MAX_FOLDER_NAME_CHARS;

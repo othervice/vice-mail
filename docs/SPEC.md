@@ -94,6 +94,8 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Layouts: Liste mit Lesebereich rechts, Lesebereich unten, nur Liste; kompakt und komfortabel.
 - Command Palette (Cmd+K / Ctrl+K) für Navigation und alle Aktionen.
 - Vollständige Tastaturbedienung, Kürzel änderbar, Konflikte werden erkannt.
+- Die Einstellungen sind durchsuchbar: Titel und Beschreibung jeder Option in der eingestellten
+  Sprache, Sprung zur Option (Cmd/Ctrl+F in den Einstellungen; Stufe 22, 0073).
 - Heller und dunkler Modus, folgt dem System; mehrere Farbthemen (Stufe 16).
 - Sprachen: Englisch und Deutsch; Spanisch vorbereitet.
 
@@ -102,7 +104,7 @@ Mehrere Konten gleichzeitig, jedes mit eigener Farbe. Die Herkunft jeder Mail is
 - Native Benachrichtigungen für neue Mails, fehlgeschlagene Sendungen, fällige Snoozes; pro Konto
   steuerbar, Ruhezeiten, Inhalt auf dem Sperrbildschirm ausblendbar.
 - Neue Mails wahlweise als Popup der App unten rechts am Bildschirmrand (Standard, Stufe 18):
-  eine Karte je Mail mit Bild, Absender, Betreff, zwei Zeilen Ausschnitt, „Lesen“ und „Löschen“
+  eine Karte je Mail mit Absender, Betreff, zwei Zeilen Ausschnitt, „Lesen“ und „Löschen“
   (mit „Rückgängig“), nimmt der App im Vordergrund nicht den Fokus; oder als Mitteilung des
   Systems.
 - Zähler am Dock- bzw. Taskleisten-Symbol.
@@ -172,6 +174,7 @@ Geprüft wird mit 10.000, 100.000 und 500.000 Mails, mehreren Konten, sehr lange
 - Tracking gesendeter Mails mit Zählpixel; nur die Standard-Lesebestätigung (0032)
 - Eingebettete Fremd-Apps (Messenger, Notizen, Chat-KI) in einer Seitenleiste (0032)
 - Kontaktbilder aus dem Netz (Gravatar, BIMI), LinkedIn-Suche, mobile Apps (vorerst, 0032)
+- Bilder und Initialen von Absendern, Kontakten und Konten (Stufe 22, 0072)
 
 ## Entscheidungen
 

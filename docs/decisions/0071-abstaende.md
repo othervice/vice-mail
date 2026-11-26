@@ -102,3 +102,9 @@ Unterzeile der Kontakte hat 12 px wie in allen Ansichten.
 
 Den Wächter-Test zu entfernen bringt die stillen Lücken zurück; die übrigen Punkte sind einzelne
 Klassen und Tokens und lassen sich einzeln zurücknehmen.
+
+## Nachtrag 26.11.2026
+
+Punkt 5 gilt seit Stufe 22 (Entscheidung 0072) für die Markenspalte statt der Avatare: Titel der
+Ansicht, Abschnitte und die Markenspalte der Zeilen (auch der Tabelle) beginnen auf einer Linie;
+`spacing.e2e.mjs` misst `rowMark` statt `rowAvatar` und meldet Avatare in der Liste als Fehler.

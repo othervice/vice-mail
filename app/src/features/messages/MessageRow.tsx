@@ -5,7 +5,6 @@ import { cx } from "../../components/cx";
 import { HighlightedText } from "../../components/HighlightedText";
 import type { AccountColor, Address, MessageActivity, MessageListItem, SearchHighlights, TableColumnId } from "../../services/ipc";
 import { useLayoutStore } from "../../stores/layout";
-import { Avatar } from "../accounts/Avatar";
 import { accountFill } from "../accounts/accountColor";
 import { RowMarks, useRowMarkLabels, type RowMark } from "../comfort/RowMarks";
 import { formatSize } from "../reading/format";
@@ -177,63 +176,23 @@ function CheckBox({ selected }: { selected: boolean }) {
 }
 
 /**
- * Stage 19 (decision 0061): the table's selection column: the unread dot, which turns into the
- * selection box on hover, on selected rows and while several messages are selected (the table has
- * no avatar to take its place). A mouse target only, like `AvatarMark`.
+ * The row's mark column, narrow and fixed at its start, in every presentation (rows, child rows,
+ * the table; stage 19, decision 0061, and since stage 22 without avatars, decision 0072): the
+ * unread dot, which turns into the selection box on hover and while several messages are selected
+ * (in every row then). Unread rows are bold as well, so unread never rests on the dot alone. A
+ * mouse target only (`data-row-check`, handled by the list): the option's `aria-selected` says
+ * the same to screen readers, and Space or X toggles it from the keyboard. Positioned, so it
+ * covers an unfolded conversation's line that runs under it (stage 17, `TreeLine`).
  */
 function SelectionMark({ unread, selected, multiSelect }: { unread: boolean; selected: boolean; multiSelect: boolean }) {
   return (
-    <span aria-hidden data-row-check className="relative flex size-(--ui-icon-small) shrink-0 items-center justify-center">
+    <span aria-hidden data-row-check className="relative flex size-(--ui-row-mark) shrink-0 items-center justify-center" data-testid="row-mark">
       {unread && (
         <span
           className={cx("size-(--ui-dot) rounded-full bg-accent", multiSelect ? "hidden" : "group-hover/row:hidden")}
           data-testid="row-unread-dot"
         />
       )}
-      <span className={cx("absolute inset-0 items-center justify-center", multiSelect ? "flex" : "hidden group-hover/row:flex")} data-testid="row-check">
-        <CheckBox selected={selected} />
-      </span>
-    </span>
-  );
-}
-
-/**
- * Stage 21 (decision 0065): the avatar, which gives its place to the selection box on hover and
- * while several messages are selected (like Gmail), and the unread dot before it, in the row's
- * lead (`--ui-row-lead`). Neither has a column of its own: a read row starts with its avatar. The
- * dot stays while the box shows, and unread rows are bold as well, so unread never rests on the
- * colour alone. A mouse target only (`data-row-check`, handled by the list): the option's
- * `aria-selected` says the same to screen readers, and Space or X toggles it from the keyboard.
- * The dot sits at the avatar's middle, or at the first line's in narrow rows (`firstLine`).
- */
-function AvatarMark({
-  unread,
-  selected,
-  multiSelect,
-  dot = "middle",
-  children,
-}: {
-  unread: boolean;
-  selected: boolean;
-  multiSelect: boolean;
-  dot?: "middle" | "firstLine";
-  children: ReactNode;
-}) {
-  return (
-    // Positioned, so it covers the start of an unfolded conversation's line (stage 17, `TreeLine`).
-    <span aria-hidden data-row-check className="relative flex shrink-0">
-      {unread && (
-        <span
-          className={cx(
-            "absolute end-full me-1 size-(--ui-dot) rounded-full bg-accent",
-            dot === "middle" ? "top-1/2 -translate-y-1/2" : "top-[calc((var(--ui-line-height-14)-var(--ui-dot))/2)]",
-          )}
-          data-testid="row-unread-dot"
-        />
-      )}
-      <span className={cx("flex", multiSelect ? "invisible" : "group-hover/row:invisible")} data-testid="row-avatar">
-        {children}
-      </span>
       <span className={cx("absolute inset-0 items-center justify-center", multiSelect ? "flex" : "hidden group-hover/row:flex")} data-testid="row-check">
         <CheckBox selected={selected} />
       </span>
@@ -324,30 +283,37 @@ function RowActions({ cursor, lifted, children }: { cursor: boolean; lifted?: bo
   );
 }
 
-/** The row's meta (marks, account, time): in the line as before, gone while the quick actions show. */
-function RowMeta({ actions, cursor, children }: { actions: boolean; cursor: boolean; children: ReactNode }) {
+/**
+ * The row's meta (marks, time): in the line as before, gone while the quick actions show. Stage 22
+ * (decision 0072): the account's label between them stays, before the actions.
+ */
+function RowMeta({ actions, cursor, children, ...rest }: { actions: boolean; cursor: boolean; children: ReactNode; "data-testid"?: string }) {
   return (
-    <span className={cx("contents", actions && "group-hover/row:hidden", actions && cursor && "group-focus-visible/list:hidden")} data-testid="row-meta">
+    <span
+      className={cx("contents", actions && "group-hover/row:hidden", actions && cursor && "group-focus-visible/list:hidden")}
+      data-testid={rest["data-testid"] ?? "row-meta"}
+    >
       {children}
     </span>
   );
 }
 
 /**
- * Stage 17: the dotted line of an unfolded conversation, under the avatar column of its row: from
- * the avatar down in the conversation's row, through every child row, ending at the last one's
- * avatar. Decoration only. In the conversation's row it starts at the row's middle, which lies
- * inside the avatar in every layout (one line: the avatar is centred; narrow: the avatar tops a
- * block of at most twice its height that is centred), and the avatar, positioned after it, covers
- * its start: it leaves the avatar's lower edge wherever that is.
+ * Stage 17: the dotted line of an unfolded conversation, under the mark column of its row (stage
+ * 22: where the avatar was, decision 0072): from the mark down in the conversation's row, through
+ * every child row, ending at the last one's mark. Decoration only. In a one-line row it starts at
+ * the row's middle, where the mark is (`mark`); in a narrow row at the middle of the first line,
+ * where the mark is there (`firstLine`, inside a box that starts at the content's top, see
+ * `MessageRowContent`). The unread dot, positioned after it, covers its start.
  */
-function TreeLine({ from, to }: { from: "top" | "avatar"; to: "bottom" | "middle" }) {
+function TreeLine({ from, to }: { from: "top" | "mark" | "firstLine"; to: "bottom" | "middle" }) {
   return (
     <span
       aria-hidden
       className={cx(
-        "pointer-events-none absolute start-(--ui-tree-line-start) border-s border-dotted border-border-strong",
-        from === "top" ? "top-0" : "top-1/2",
+        "pointer-events-none absolute border-s border-dotted border-border-strong",
+        from === "firstLine" ? "start-[calc(var(--ui-row-mark)/2)]" : "start-(--ui-tree-line-start)",
+        from === "top" ? "top-0" : from === "mark" ? "top-1/2" : "top-[calc(var(--ui-space-5)/2)]",
         to === "bottom" ? "bottom-0" : "h-1/2",
       )}
       data-testid="tree-line"
@@ -356,11 +322,12 @@ function TreeLine({ from, to }: { from: "top" | "avatar"; to: "bottom" | "middle
 }
 
 /**
- * One message in the list (docs/DESIGN.md, "Zeile"): unread dot, avatar (the selection box on
- * hover, stage 21), sender, subject with conversation size and attachment symbol, preview, flag, pending or failed
- * change, time, and the quick actions on hover. Wide lists show one line; narrow ones three
- * (sender and time, subject, preview), compact ones two (decision 0031). The option around it
- * carries the accessible name (`useRowLabel`); the preview describes it.
+ * One message in the list (docs/DESIGN.md, "Zeile"): the mark column (unread dot, the selection
+ * box on hover), sender, subject with conversation size and attachment symbol, preview, flag,
+ * pending or failed change, the account's dot and name in lists that mix accounts, time,
+ * and the quick actions on hover. No avatar (stage 22, decision 0072). Wide lists show one line;
+ * narrow ones three (sender and time, subject, preview), compact ones two (decision 0031). The
+ * option around it carries the accessible name (`useRowLabel`); the preview describes it.
  */
 export function MessageRowContent({
   item,
@@ -379,7 +346,6 @@ export function MessageRowContent({
 }: MessageRowContentProps) {
   const { t, i18n } = useTranslation();
   const compact = useLayoutStore((state) => state.density === "compact");
-  const person = showRecipients ? item.to[0] : item.from;
   const who = useWho(item, showRecipients, decoration);
   // Search highlights mark the message's own sender, not a list of a conversation's senders.
   const ownSender = (decoration?.participants?.length ?? 0) <= 1;
@@ -393,16 +359,10 @@ export function MessageRowContent({
   // Narrow comfortable rows give the preview a line of its own.
   const threeLine = twoLine && !compact;
 
-  const sender = (
+  const senderText = (
     <span
       title={who}
-      className={cx(
-        "truncate text-14 text-primary",
-        item.unread ? "font-semibold" : "font-medium",
-        !twoLine && "w-(--ui-list-sender-width) shrink-0",
-        // Narrow: as wide as the names; the account label beside them gives way first.
-        twoLine && "min-w-0",
-      )}
+      className={cx("min-w-0 truncate text-14 text-primary", item.unread ? "font-semibold" : "font-medium")}
       data-testid="row-sender"
     >
       {highlights && !showRecipients && item.from && ownSender ? (
@@ -412,6 +372,9 @@ export function MessageRowContent({
       )}
     </span>
   );
+  // The sender's column (narrow: as wide as the names; the account's name beside them gives way
+  // first).
+  const sender = <span className={cx("flex min-w-0 items-center", !twoLine && "w-(--ui-list-sender-width) shrink-0")}>{senderText}</span>;
   const previewElement = preview && (
     <span
       className={cx("min-w-0 truncate text-13 text-tertiary", !threeLine && "flex-1 basis-0")}
@@ -458,12 +421,14 @@ export function MessageRowContent({
       <RowMarks item={item} omit={omitMarks} />
     </>
   );
-  // Stage 8: which account, in words, wherever the avatar ring's colour tells accounts apart.
-  // Stage 17: the names come first; short of room the label gives way first, down to its colour
-  // dot (a shrink factor a million times the names', see `RepliesToggle`; the dot as its smallest
-  // size); the name stays its tooltip and is part of the row's accessible name. The name shows
-  // whole (an overlong one cut at the label's width) or not at all, never as a fragment: where it
-  // does not fit beside the dot it wraps onto a second line, which the label's height hides.
+  // Stage 8: which account, in words, in lists that mix accounts, with its colour. Stage 17: the
+  // names come first; short of room the label gives way first, down to its colour dot (a shrink
+  // factor a million times the names', see `RepliesToggle`; the dot as its smallest size); the
+  // name stays its tooltip and is part of the row's accessible name. The name shows whole (an
+  // overlong one cut at the label's width) or not at all, never as a fragment: where it does not
+  // fit beside the dot it wraps onto a second line, which the label's height hides. Stage 22
+  // (decision 0072): it carries what the avatar's ring did, so it stays while the quick actions
+  // show (before them, the marks and the time give way to them).
   const accountElement = decoration?.account ? (
     <span
       title={decoration.account}
@@ -491,40 +456,38 @@ export function MessageRowContent({
       {time}
     </time>
   );
-  // The account ring only where rows of several accounts mix (decision 0031). Stage 21: the
-  // selection box takes its place on hover and in a multiple selection, the unread dot before it.
-  const avatar = (
-    <AvatarMark unread={item.unread} selected={selected} multiSelect={multiSelect} dot={twoLine ? "firstLine" : "middle"}>
-      <Avatar name={person?.name} email={person?.email ?? ""} accountColor={accountColor} ring={decoration?.account !== undefined} />
-    </AvatarMark>
+  const mark = <SelectionMark unread={item.unread} selected={selected} multiSelect={multiSelect} />;
+  const rowClass = cx(
+    "relative h-full rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
+    selected ? "bg-selected" : "group-hover/row:bg-hover",
+    // The list keeps focus (aria-activedescendant); the cursor row shows it.
+    cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
+    contextTarget && CONTEXT_TARGET,
   );
 
   // Hidden from screen readers: the option is named by its visually hidden text (useRowLabel).
-  return (
-    <div
-      aria-hidden
-      className={cx(
-        "relative flex h-full items-center rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
-        selected ? "bg-selected" : "group-hover/row:bg-hover",
-        // The list keeps focus (aria-activedescendant); the cursor row shows it.
-        cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
-        contextTarget && CONTEXT_TARGET,
-      )}
-      data-context-target={contextTarget || undefined}
-    >
-      {/* Stage 17: the unfolded conversation's line leaves from under the avatar. */}
-      {expanded && <TreeLine from="avatar" to="bottom" />}
-      {twoLine ? (
-        // Narrow: the dot sits on the first line, the avatar's top on the sender's.
-        <span className="flex min-w-0 flex-1 items-start gap-3">
-          {avatar}
+  if (twoLine) {
+    // Narrow: the content in the middle of a grid (rows 1fr, auto, 1fr), the mark on its first
+    // line. Stage 17: the unfolded conversation's line leaves from the mark, in a box from the
+    // content's top to the row's bottom, so it needs no heights.
+    return (
+      <div aria-hidden className={cx(rowClass, "grid grid-rows-[1fr_auto_1fr]")} data-context-target={contextTarget || undefined}>
+        {expanded && (
+          <span aria-hidden className="pointer-events-none relative col-start-1 row-start-2 row-end-4">
+            <TreeLine from="firstLine" to="bottom" />
+          </span>
+        )}
+        <span className="col-start-1 row-start-2 flex min-w-0 items-start gap-2">
+          <span className="flex h-5 shrink-0 items-center">{mark}</span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex h-5 min-w-0 items-center gap-2">
               {sender}
               <span className="flex-1" />
-              <RowMeta actions={Boolean(actions)} cursor={cursor}>
+              <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
                 {marks}
-                {accountElement}
+              </RowMeta>
+              {accountElement}
+              <RowMeta actions={Boolean(actions)} cursor={cursor}>
                 {timeElement}
               </RowMeta>
               {/* Stage 18: on the first line, clear of the subject's line with the toggle. */}
@@ -538,19 +501,28 @@ export function MessageRowContent({
             {threeLine && previewElement}
           </span>
         </span>
-      ) : (
+      </div>
+    );
+  }
+  return (
+    <div aria-hidden className={cx(rowClass, "flex items-center")} data-context-target={contextTarget || undefined}>
+      {/* Stage 17: the unfolded conversation's line leaves from under the mark. */}
+      {expanded && <TreeLine from="mark" to="bottom" />}
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {mark}
         <span className="flex min-w-0 flex-1 items-center gap-3">
-          {avatar}
           {sender}
           {subjectLine}
-          <RowMeta actions={Boolean(actions)} cursor={cursor}>
+          <RowMeta actions={Boolean(actions)} cursor={cursor} data-testid="row-meta-marks">
             {marks}
-            {accountElement}
+          </RowMeta>
+          {accountElement}
+          <RowMeta actions={Boolean(actions)} cursor={cursor}>
             {timeElement}
           </RowMeta>
           {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
         </span>
-      )}
+      </span>
     </div>
   );
 }
@@ -677,7 +649,7 @@ export function TableRowContent({
     <div
       aria-hidden
       className={cx(
-        "relative flex h-full items-center rounded-row px-3 transition-colors",
+        "relative flex h-full items-center rounded-row ps-(--ui-row-lead) pe-3 transition-colors",
         selected ? "bg-selected" : "group-hover/row:bg-hover",
         cursor && "group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-focus-ring",
         contextTarget && CONTEXT_TARGET,
@@ -736,10 +708,10 @@ function childText(item: MessageListItem, noSubject: string): string {
 
 /**
  * Stage 17 (decision 0049): one message of an unfolded conversation, a compact single line in
- * every layout: the unread dot, the sender's mini avatar on the conversation's dotted line (the
- * selection box in its place on hover, stage 21), the sender, the folder where it lies elsewhere
- * (the user's own answer in Sent), the start of the text, symbols, and the time. Same tokens,
- * selection, focus and quick actions as a message row.
+ * every layout: the mark column on the conversation's dotted line (unread dot, the selection box
+ * on hover; stage 22 without the sender's mini avatar, decision 0072), the sender, the folder
+ * where it lies elsewhere (the user's own answer in Sent), the start of the text, symbols, and
+ * the time. Same tokens, selection, focus and quick actions as a message row.
  */
 export function ChildRowContent({ item, folder, bounds, selected, cursor, multiSelect, last, actions, contextTarget = false }: ChildRowContentProps) {
   const { t, i18n } = useTranslation();
@@ -758,13 +730,10 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
       data-context-target={contextTarget || undefined}
     >
       <TreeLine from="top" to={last ? "middle" : "bottom"} />
-      <span className="flex min-w-0 flex-1 items-center gap-3">
-        {/* The avatar column of the conversation's row; the mini avatar sits on its line. */}
-        <AvatarMark unread={item.unread} selected={selected} multiSelect={multiSelect}>
-          <span className="flex w-(--ui-avatar) shrink-0 justify-center">
-            <Avatar name={item.from?.name} email={item.from?.email ?? ""} accountColor={0} ring={false} size="mini" />
-          </span>
-        </AvatarMark>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {/* The mark column of the conversation's row, on its line. */}
+        <SelectionMark unread={item.unread} selected={selected} multiSelect={multiSelect} />
+        <span className="flex min-w-0 flex-1 items-center gap-3">
         {/* As wide as they are: the sender's name (at most a third), the folder; the text the rest.
             Clipped: with the quick actions in a narrow list the folder may not fit beside them. */}
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -797,6 +766,7 @@ export function ChildRowContent({ item, folder, bounds, selected, cursor, multiS
           </time>
         </RowMeta>
         {actions && <RowActions cursor={cursor}>{actions}</RowActions>}
+        </span>
       </span>
     </div>
   );
@@ -810,13 +780,13 @@ export function ChildStatusRow({ kind, text, last }: { kind: "loading" | "error"
   return (
     <div
       className={cx(
-        "relative flex h-full items-center gap-3 rounded-row ps-(--ui-row-lead) pe-3 text-12 transition-colors",
+        "relative flex h-full items-center gap-2 rounded-row ps-(--ui-row-lead) pe-3 text-12 transition-colors",
         kind === "error" ? "text-danger group-hover/row:bg-hover" : "text-tertiary",
       )}
       data-testid={`child-status-${kind}`}
     >
       <TreeLine from="top" to={last ? "middle" : "bottom"} />
-      <span aria-hidden className="w-(--ui-avatar) shrink-0" />
+      <span aria-hidden className="w-(--ui-row-mark) shrink-0" />
       {kind === "loading" ? (
         <>
           <span className="sr-only">{text}</span>

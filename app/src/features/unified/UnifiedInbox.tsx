@@ -42,7 +42,7 @@ interface PanesProps {
 
 /**
  * The list of a unified view and the reading pane: the sorted inbox (stage 9: blocks, bundles,
- * hidden snoozes) over every shown account, each row in its account's colour (the avatar ring),
+ * hidden snoozes) over every shown account, each row with its account's dot (stage 22),
  * opened with the account it belongs to. Decision 0039: with the conversation view on (the
  * default) each row is a conversation of its account and opens in the thread pane.
  */

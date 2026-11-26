@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../components/Button";
 import { ErrorNotice } from "../../components/ErrorNotice";
 import { useNotificationPause, usePauseNotifications } from "./queries";
+import { cx } from "../../components/cx";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 /** "14:30" or "2:30 PM", in the UI's language. */
 function timeOf(ms: number, language: string): string {
@@ -35,8 +37,9 @@ export function NotificationPause({ disabled = false }: { disabled?: boolean }) 
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="notification-pause">
-      <div className="flex flex-col gap-1">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="notification-pause" {...SETTING_BLOCK}>
+      {/* Stage 22 (decision 0073): found by the settings search. */}
+      <div {...settingAnchor(t("desktop.pause.title"))} className={cx("flex flex-col gap-1", SETTING_ANCHOR_CLASS)}>
         <h3 id={headingId} className="text-14 font-semibold text-primary">
           {t("desktop.pause.title")}
         </h3>

@@ -22,6 +22,7 @@ import { formatSize } from "../composer/addresses";
 import { withoutImage } from "./placeholders";
 import { hasNotes, SnippetNotes } from "./SnippetNotes";
 import { signatureImagesQueryKey, useDeleteSignature, useSaveSignature, useSignatureImages, useSignatures } from "./queries";
+import { SETTING_ANCHOR_CLASS, SETTING_BLOCK, settingAnchor } from "../../components/settingAnchor";
 
 // The editor (TipTap) loads with the first signature that is edited, not with the settings.
 const RichEditor = lazy(() => import("../composer/RichEditor").then((module) => ({ default: module.RichEditor })));
@@ -50,11 +51,19 @@ export function SignatureSettings() {
   const edited = editing?.kind === "edit" ? (list.find((s) => s.id === editing.id) ?? null) : null;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4" data-testid="signature-settings">
-      <h3 id={headingId} className="text-14 font-semibold text-primary">
-        {t("snippets.signatures.title")}
-      </h3>
-      <p className="text-13 text-secondary">{t("snippets.signatures.hint")}</p>
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface-raised shadow-card p-4"
+      data-testid="signature-settings"
+      {...SETTING_BLOCK}
+    >
+      {/* Stage 22 (decision 0073): found by the settings search. */}
+      <div {...settingAnchor(t("snippets.signatures.title"))} className={cx("flex flex-col gap-3", SETTING_ANCHOR_CLASS)}>
+        <h3 id={headingId} className="text-14 font-semibold text-primary">
+          {t("snippets.signatures.title")}
+        </h3>
+        <p className="text-13 text-secondary">{t("snippets.signatures.hint")}</p>
+      </div>
       {signatures.isError && (
         <ErrorNotice context={t("snippets.signatures.loadFailed")} error={signatures.error} onRetry={() => void signatures.refetch()} />
       )}

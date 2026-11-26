@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { accountRing } from "../src/features/accounts/accountColor";
+import { accountFill } from "../src/features/accounts/accountColor";
 import type { AccountGroup, InboxScope } from "../src/services/ipc";
 import { ipcError, makeAccount, makeMailbox, makeMessage, makeView, mockCore, standardMailboxes } from "./support/core";
 import { renderApp } from "./support/render";
@@ -58,8 +58,13 @@ describe("unified inbox", () => {
     expect(core.callsOf("list_inbox")).toContainEqual({ scope: { kind: "unified", view: { kind: "all" } }, cursor: null, limit: 200 });
     expect(core.callsOf("list_unified_inbox")).toEqual([]);
     const options = within(list).getAllByRole("option");
+    // Stage 22 (decision 0072): no avatar ring; the account's label with a dot in its colour,
+    // named by its tooltip, and the account in words in the row's name.
     for (const [index, account] of [ADA, WORK, CLUB].entries()) {
-      expect(options[index]?.querySelector(`.${accountRing(account.color)}`)).toBeTruthy();
+      const option = options[index] as HTMLElement;
+      expect(within(option).getByTestId("row-account").title).toBe(account.displayName || account.email);
+      expect(within(option).getByTestId("row-account-dot").className).toContain(accountFill(account.color));
+      expect(within(option).queryByTestId("avatar")).toBeNull();
     }
 
     // Opening a row opens it with its own account.
