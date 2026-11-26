@@ -255,7 +255,10 @@ describe("stage 22: no pictures, the mark column, account dots and the settings 
     for (const account of accounts) {
       assert.ok(account.dot && account.dotSize > 0, `no dot for ${String(account.label)}`);
       assert.equal(account.avatar, false, `initials or a picture for ${String(account.label)}`);
-      assert.equal(account.text, "", `letters on ${String(account.label)}`);
+      // Stage 23 (decision 0085): no letters; the count of unread mail under the dot ("999+" from
+      // 1,000 on), which the name says too (WCAG 2.5.3).
+      assert.match(account.text ?? "", /^[\d.,\u00a0\u202f]*\+?$/, `letters on ${String(account.label)}`);
+      if (account.text) assert.ok(account.label?.includes(account.text), `the name of ${String(account.label)} does not say ${account.text}`);
       assert.match(account.label ?? "", /Alice Archer|Bob Baker/);
     }
     // The tooltip names the account.
