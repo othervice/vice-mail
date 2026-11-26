@@ -49,7 +49,8 @@ dann die Ansichten der Spalte in der gewählten Reihenfolge (Stufe 17, „Ansich
 Später, Aufgaben, Zum Lesen und Angeheftete Anhänge (Stufe 16, 0033 und 0036), Markiert (die Markierung
 des Servers aus allen Ordnern außer Papierkorb und Spam, 24.11.2026), Angepinnt, gespeicherte
 Ansichten, Kontakte (Stufe 17, 0050)), dann fest Gesendet, Entwürfe, Archiv, Papierkorb, Ordner (klappt die Spalte auf). Unten:
-Konten-Umschalter mit Kontofarben, Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
+Konten-Umschalter (je Konto ein Punkt in seiner Farbe, 12 px, Name als Tooltip und zugänglicher Name;
+keine Initialen, Stufe 22, Entscheidung 0072), Aktivität, Ausgang, Einstellungen. Jedes Icon hat einen Tooltip
 mit Name und Tastenkürzel. Spalte und Leiste stehen nie nebeneinander.
 
 **Kopf der Liste.** Titel der Ansicht mit Auswahl von Konto oder Kontogruppe, darunter eine
@@ -66,14 +67,13 @@ mit Symbol, Name, Zähler und Chips der häufigsten Absender; ein Klick klappt s
 
 | Element | Verhalten |
 |---|---|
-| Punkt | ungelesen: 8 px in `accent` im Vorlauf der Zeile (`--ui-row-lead`, 16 px), 4 px vor dem Avatar, mittig zu ihm (schmale Liste: zur ersten Zeile); bleibt beim Überfahren und in der Auswahl, dazu halbfett. Keine eigene Spalte: eine gelesene Zeile beginnt mit dem Avatar (Stufe 21, Entscheidung 0065; vorher eine Spalte, die beim Überfahren zum Kästchen wurde) |
-| Avatar | 32 px; das Bild, das der Nutzer für den Kontakt gewählt hat (Stufe 17, 0050), sonst Initialen auf einer weichen Tönung je Absender; Ring in der Kontofarbe nur, wo sich Konten mischen. Keine Bilder aus dem Netz. Beim Überfahren und bei Mehrfachauswahl (dann in jeder Zeile) steht an seiner Stelle das Auswahlkästchen (16 px, wie bei Gmail; Stufe 21) |
+| Markenspalte | schmal und fest am Zeilenanfang nach dem Vorlauf (`--ui-row-lead`, 16 px), so breit wie das Auswahlkästchen (`--ui-row-mark`, 16 px), auf der Linie von Titel und Abschnitten: ungelesen der Punkt (8 px, `accent`, mittig; schmale Liste: mittig zur ersten Zeile), beim Überfahren und bei Mehrfachauswahl (dann in jeder Zeile) an seiner Stelle das Kästchen (16 px). Ungelesen ist außerdem halbfett, nie nur der Punkt. Eine gelesene Zeile lässt die Spalte leer; 8 px danach beginnt der Absender. Kein Avatar (Stufe 22, Entscheidung 0072; vorher 32-px-Avatar mit Initialen, Stufe 21: Kästchen an seiner Stelle) |
 | Absender | feste Spalte, halbfett wenn ungelesen, sonst mittel; in schmaler Liste so breit wie die Namen |
 | Betreff | Haupttext (mittel, wenn ungelesen), danach bei Konversationen „n Antworten“ mit Pfeil als Pille (Stufe 17) und Anhang-Symbol |
 | Vorschau | gedämpft, abgeschnitten |
-| Konto | nur wo sich Konten mischen (vereinter Posteingang, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). |
+| Konto | nur wo sich Konten mischen (vereinter Posteingang, Ansichten, Suche über Konten): Punkt in der Kontofarbe und Name (12 px, `text-secondary`, höchstens 128 px) vor der Zeit. Die Namen der Absender gehen vor: Fehlt Platz, weicht erst das Konto, bis nur der Punkt neben der Zeit bleibt, dann erst werden die Namen gekürzt. Der Kontoname steht ganz da oder gar nicht, nie als Bruchstück; er bleibt Tooltip und steht im Namen der Zeile (Stufe 17, Feinschliff 24.11.2026). Seit Stufe 22 trägt er, was der Ring des Avatars trug, und bleibt darum beim Überfahren vor den Schnellaktionen stehen (Markierungen und Zeit weichen ihnen) |
 | Zeit | rechtsbündig, Tabellenziffern; heute Uhrzeit, dieses Jahr Tag und Monat („9. Okt.“), davor mit Jahr („6. Sept. 2025“) |
-| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille. Seit Stufe 21 (Entscheidung 0065) auch im vereinten Posteingang und in Suchergebnissen, mit Konto und Ordner jeder Zeile (nur lesende Konten gesperrt mit Grund); das Konto weicht dann wie die Zeit |
+| Schnellaktionen | beim Überfahren und bei Tastaturfokus als schwebende Leiste am Zeilenende: Löschen, Archivieren, Gelesen, Markieren, Anpinnen, Verschieben, Später. Seit Stufe 18 (Entscheidung 0052) an der Stelle von Markierungen, Konto und Zeit in der Zeile selbst, nicht darübergelegt: Der Text davor weicht (erst die Vorschau, dann das Wort der Pille „n Antworten“, dann der Betreff; in der schmalen Liste der Absender in der ersten Zeile), Auswahlkästchen und Pille liegen nie darunter. Ziele 24 px, die Leiste so hoch wie die kleinste Zeile erlaubt; in der schmalen Liste in der ersten Zeile (Absender und Zeit), 4 px darüber hinaus, nie in der Zeile mit der Pille. Seit Stufe 21 (Entscheidung 0065) auch im vereinten Posteingang und in Suchergebnissen, mit Konto und Ordner jeder Zeile (nur lesende Konten gesperrt mit Grund); das Konto wich dann wie die Zeit, seit Stufe 22 (Entscheidung 0072) bleibt es vor der Leiste stehen |
 
 Ist die Liste schmaler als 720 px, werden Zeilen mehrzeilig: Absender und Zeit oben, darunter der
 Betreff, darunter die Vorschau (nur komfortabel).
@@ -127,8 +127,7 @@ feste Farben oder Abstände.
 | Akzent | `accent` (Text, Symbole, Schalter), `accent-fill` (Füllung des Hauptknopfs und kleiner Marken, dazu `text-on-accent`), `accent-soft`, `danger` (mit `text-on-danger`), `success`, `warning` |
 | Bedienelemente | `track` (Spur von Segmentschaltern und Schaltern), `brand-ink` („Vice“ in der Wortmarke) |
 | Konten | acht unterscheidbare Kontofarben, in beiden Modi geprüft |
-| Avatare | acht Tönungen `avatar-n-bg` / `avatar-n-text`, Wahl per Hash der Absenderadresse, Schrift auf Fläche ≥ 4,5:1 |
-| Schrift | Systemschrift (SF Pro, Segoe UI Variable); Größen 12, 13, 14, 16, 20, 28 (9 nur für das Initial im Mini-Avatar); Gewichte 400, 500, 600 |
+| Schrift | Systemschrift (SF Pro, Segoe UI Variable); Größen 12, 13, 14, 16, 20, 28; Gewichte 400, 500, 600 |
 | Abstand | Raster aus 4 px: 4, 8, 12, 16, 20, 24, 32, 40, 48; andere Stufen erzeugen kein CSS und sind per Test verboten (Stufe 21, siehe „Abstände“) |
 | Rundung | 6 (Bedienelemente), 8 (Zeilen, Kacheln), 10 (Karten), 16 (Panels, Fenster in der App); Pillen rund |
 | Schatten | vier Stufen: Zeile (Haarbreite), Karte (Priorität, leere Zustände), schwebend (Menüs, Schnellaktionen), Panel |
@@ -173,16 +172,18 @@ Schnellaktionen. Im dunklen Modus dieselben Stufen, die Leiste fast schwarz, Sch
 oder normal, Vorschau 13 px gedämpft, Zeit 12 px mit Tabellenziffern, ungelesen dunkler. In der
 schmalen Liste drei Zeilen: Absender und Zeit, Betreff mit Plaketten, Vorschau.
 
-**Avatare.** Rund, 32 px, Initialen auf einer weichen Tönung je Absender (acht Töne, hell und dunkel
-mit gleicher Zuordnung). Der Kontoring erscheint nur, wo er Konten unterscheidet (vereinter
-Posteingang, Suche über Konten, Kontoauswahl, Einstellungen).
+**Keine Bilder.** Keine Avatare, Initialen, Kontakt- oder Kontobilder (Stufe 22, Entscheidung 0072;
+ersetzt die Avatar-Tönungen von 0031 und die Kontaktbilder von 0050). Absender und Kontakte stehen
+mit ihrem Namen da; Konten zeigen ihre Farbe als Punkt neben dem Namen (Seitenspalte, schmale
+Leiste, Einstellungen → Konten, Kontoetikett in Zeilen gemischter Listen). Bilder in Mails und Anhänge bleiben.
 
 **Priorität.** Eine erhabene Karte mit Haarlinie und weichem Schatten (seit 0053 kühl statt warm
 getönt), Titel mit Blitz in der Warnfarbe, höchstens drei Zeilen, „Alle anzeigen (n)“ mittig als
 Abschluss.
 
-**Bündel.** Symbolkachel in eigener Tönung (Benachrichtigungen blau, Newsletter bernstein), Name,
-Zähler „6 · 2 neu“, Absender-Chips mit 16-px-Mini-Avatar und Anzahl, „+n“ für den Rest, Pfeil.
+**Bündel.** Wie eine Zeile: die Markenspalte (ungelesen der Punkt), dann wo der Absender steht das
+Symbol (16 px, `text-secondary`, Glocke bzw. Zeitung) mit Name und Zähler „6 · 2 neu“, Absender-Chips
+mit Anzahl (ohne Mini-Avatar, Stufe 22), „+n“ für den Rest, Pfeil.
 In schmaler Liste stehen die Chips unter dem Namen und umbrechen.
 
 **Leiste und Kopf.** Schmale Symbolleiste mit Tooltips (Name und Tastenkürzel), aktive Ansicht mit
@@ -296,6 +297,21 @@ eine Karte mit Haarlinien zwischen den Zeilen.
 14 rem), jeder Eintrag mit kleinem Symbol (dekorativ, der Name steht daneben); aktiv: `selected`,
 Balken im Akzent, Symbol im Akzent. Der Abschnittstitel ist 20 px halbfett, der Inhalt hat 40 px
 seitlichen Abstand. Die Legende der Serverangaben steht in der Karte statt auf ihrem Rand.
+
+**Einstellungen durchsuchen** (Stufe 22, Entscheidung 0073). Über der Abschnittsliste ein Suchfeld
+(32 px, Lupe, „Einstellungen durchsuchen …“, Haarlinie `border`, `surface-raised`, mit ✕ zum Leeren,
+sobald Text drinsteht). Tippen zeigt darunter schwebend die Treffer (`surface-raised`,
+`shadow-floating`, 26 rem breit, höchstens 28 rem hoch, dann scrollend), nach Abschnitten gruppiert
+in der Reihenfolge der Liste, je Gruppe der Abschnittsname (12 px `text-secondary`), je Treffer Titel
+(13 px) und Beschreibung (12 px `text-secondary`, höchstens zwei Zeilen), die Fundstellen markiert
+(`accent-soft`); der Name eines Abschnitts findet den Abschnitt („Die ganze Seite“). Gefunden wird
+über Titel und Beschreibung in der eingestellten Sprache, ohne Groß-/Kleinschreibung und Akzente,
+jedes Wort muss vorkommen. Pfeiltasten bewegen durch die Treffer (der Fokus bleibt im Feld), Eingabe
+oder Klick springt hin: der Abschnitt öffnet, die Option steht in der Mitte, ihr Bedienelement bekommt
+den Fokus (sonst die Zeile), und sie ist zwei Sekunden lang mit `accent-soft` hinterlegt (8 px um
+sie herum, ein- und ausgeblendet wie jede Farbe, bei „Bewegung reduzieren“ ohne Übergang; kein
+weiches Scrollen). Escape leert das Feld, Cmd/Ctrl+F (das Kürzel der Suche) setzt in den Einstellungen
+den Fokus hinein. Ohne Treffer sagt eine Statuszeile „Keine Einstellung zu „…“ gefunden.“
 
 **Befehlspalette und Tastenübersicht.** 12 % der Fensterhöhe vom oberen Rand (`palette-top`), Schatten
 `shadow-panel`, Zeilen 40 px mit Rundung 8; die Übersicht zweispaltig, sobald Platz für zwei Spalten
@@ -680,10 +696,9 @@ Pille schiebt nie die Zeit (sie steht in der breiten Liste in der Betreffspalte,
 der zweiten Zeile).
 
 **Kindzeilen.** Eine Zeile je Mail des Gesprächs, älteste zuerst, in jeder Listenbreite einzeilig:
-36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: der Punkt für ungelesen
-im Vorlauf wie bei jeder Zeile, in der Avatar-Spalte der Mini-Avatar (16 px) des Absenders auf der
-Linie (beim Überfahren und bei Mehrfachauswahl das Kästchen an seiner Stelle, Stufe 21), der Absender, wo die Absender
-der Gesprächszeile beginnen (13 px, halbfett wenn ungelesen, sonst normal; in jeder Breite so breit
+36 px komfortabel, 28 px kompakt (`--ui-child-row-height`). Von links: die Markenspalte wie in jeder
+Zeile, auf der Linie (ungelesen der Punkt, beim Überfahren und bei Mehrfachauswahl das Kästchen;
+seit Stufe 22 ohne Mini-Avatar), der Absender, wo die Absender der Gesprächszeile beginnen (13 px, halbfett wenn ungelesen, sonst normal; in jeder Breite so breit
 wie der Name, höchstens ein Drittel), liegt die Mail in einem anderen Ordner als die Zeile, dessen
 Name als Pille (`badge`, 12 px, „Gesendet“, „Posteingang“, „Papierkorb“), dann der Anfang des
 Textes (13 px; `text-secondary` wenn ungelesen, sonst `text-tertiary`; ohne Vorschau der Betreff);
@@ -695,12 +710,12 @@ Fläche, Auswahl (`selected`), Überfahren (`hover`), Fokusring und Schnellaktio
 Zeile, auch in den Karten von Priorität und Bündeln.
 
 **Linie.** 1 px gepunktet in `border-strong` (Punkte wirken leiser als die Farbe), mittig unter der
-Avatar-Spalte (`--ui-tree-line-start`). In der aufgeklappten Zeile beginnt sie sichtbar am unteren
-Rand des Avatars, in der breiten wie in der schmalen Liste (Feinschliff 24.11.2026; vorher in der
-schmalen erst an der ersten Kindzeile): Sie setzt in der Mitte der Zeile an, die in jeder Anordnung
-im Avatar liegt, und der Avatar deckt ihren Anfang. Sie läuft ohne Lücke durch jede Kindzeile und
-endet in der Mitte der letzten, unter deren Mini-Avatar. Ladezeilen und Hinweise liegen auf
-derselben Linie.
+Markenspalte (`--ui-tree-line-start`, seit Stufe 22; vorher unter dem Avatar). In der aufgeklappten
+Zeile beginnt sie an der Marke, in der breiten wie in der schmalen Liste: breit in der Mitte der
+Zeile, schmal in der Mitte der ersten Zeile (in einem Kasten vom oberen Rand des Inhalts bis zum
+unteren der Zeile, so braucht sie keine Höhen); der Punkt für ungelesen deckt ihren Anfang. Sie läuft
+ohne Lücke durch jede Kindzeile und endet in der Mitte der letzten, unter deren Marke. Ladezeilen
+und Hinweise liegen auf derselben Linie.
 
 **Laden und Fehler.** Die Mails laden beim Aufklappen. Solange: eine Kindzeile mit zwei ruhigen
 Balken (`badge`, `hover`) und für Bildschirmleser „Konversation wird geladen“; die Zeile ist
@@ -735,9 +750,9 @@ Liste auf und wählt ihre Zeile.
 **Geprüft** in den Desktop-Tests (`conversations.e2e.mjs`) hell und dunkel bei 1200 × 800, axe ohne
 schwere Befunde, Bildschirmfotos `conversations-*.png` (nicht eingecheckt). Seit dem Feinschliff
 misst der Test in der breiten und der schmalen Liste: Betreff des Gesprächs, Betreff erst gekürzt,
-wenn das Wort der Pille weg ist, Zeit ganz in der Zeile, Linie vom Avatar bis zur letzten Mail ohne
-Lücke, Absender der Kindzeilen so breit wie ihr Name, Text bis zum Rand; im vereinten Posteingang
-mit zwei Konten Namen erst gekürzt, wenn das Konto nur noch Punkt ist.
+wenn das Wort der Pille weg ist, Zeit ganz in der Zeile, Linie von der Marke (vor Stufe 22: vom
+Avatar) bis zur letzten Mail ohne Lücke, Absender der Kindzeilen so breit wie ihr Name, Text bis zum
+Rand; im vereinten Posteingang mit zwei Konten Namen erst gekürzt, wenn das Konto nur noch Punkt ist.
 
 ## Erster Start (Stufe 15, Entscheidung 0044)
 
@@ -786,8 +801,9 @@ bleiben sichtbar; bei 900 × 600 scrollen Willkommen, Konto und Optional in der 
 
 ## Kontakte (Stufe 17, Entscheidung 0050)
 
-Wunsch vom 24.11.2026: jede Adresse wird Kontakt, eigene Bilder statt nur Initialen („nett, aber
-nutzlos“), eine schön gestaltete Kontaktseite mit guter Suche, Spam-Adressen sperren.
+Wunsch vom 24.11.2026: jede Adresse wird Kontakt, eine schön gestaltete Kontaktseite mit guter
+Suche, Spam-Adressen sperren. Die eigenen Bilder dieses Wunschs sind seit Stufe 22 wieder entfernt
+(Entscheidung 0072: „Alles mit Bildern raus aus dem Client.“).
 
 **Ansicht.** „Kontakte“ ist eine eigene Ansicht (Spalte nach „Gespeicherte Ansichten“, Leiste,
 Befehlspalette), über alle Konten, mit eigenem Kopf („Kontakte“, darunter „Aus den Mails auf diesem
@@ -799,36 +815,20 @@ für Bildschirmleser „Kontakte durchsuchen“), sucht nach 120 ms Tipp-Pause; 
 „Listen und Systemadressen zeigen“ (aus: nur Personen). Pfeil runter springt vom Feld in die Liste,
 Escape leert das Feld.
 
-**Zeile.** 32-px-Avatar (Bild oder Initialen auf der Tönung des Absenders, ohne Kontoring), Name
-(14 px mittel) mit Pillen „Liste“/„System“ (`badge`) und „Spam“ (`danger` auf zartem Rot), darunter
+**Zeile.** Name (14 px mittel; kein Avatar, Stufe 22) mit Pillen „Liste“/„System“ (`badge`) und „Spam“ (`danger` auf zartem Rot), darunter
 die Adresse (12 px `text-secondary`), rechts das Datum der letzten Mail (12 px, Tabellenziffern, wie
 die Zeitspalte der Mailliste). Gewählt `selected`, sonst beim Überfahren `hover`, abgerundet wie
 Listenzeilen. Die Liste ist eine `listbox` mit `aria-activedescendant`: Pfeiltasten, Pos1, Ende,
 Bild auf/ab wählen und zeigen den Kontakt, Eingabe setzt den Fokus auf seinen Namen. Am Ende
 „Weitere Kontakte zeigen“.
 
-**Kontakt.** Oben das Bild (96 px rund) mit „Bild wählen …“ bzw. „Bild ändern …“ und „Bild
-entfernen“ (12 px) und dem Hinweis „oder ein Bild hierher ziehen“; zieht man eine Datei über das
-Fenster, bekommt das Bild einen Akzentrand und der Hinweis heißt „Lass das Bild los, um es zu
-verwenden“. Daneben Name (20 px halbfett), Pillen, Adresse (14 px), bei Listen und Systemadressen
-ein Satz, was das heißt. Darunter eine Reihe Knöpfe: „Mail schreiben“ (Hauptknopf), „Alle Mails
+**Kontakt.** Oben Name (20 px halbfett), Pillen, Adresse (14 px), bei Listen und Systemadressen
+ein Satz, was das heißt (kein Bild, Stufe 22). Darunter eine Reihe Knöpfe: „Mail schreiben“ (Hauptknopf), „Alle Mails
 anzeigen“ (Suche `from:` über alle Konten), „Als Spam markieren“ bzw. „Kein Spam“, „Name
 bearbeiten“. Dann Abschnitte mit 14-px-Überschrift: „Adressen“ (Karte mit einer Zeile je Adresse:
 Adresse, darunter „12 gesendet · 30 empfangen · in 2 weiteren · zuletzt 20.11.2026“, „Trennen“ an
 zusammengeführten), „Notiz“ (Textfeld, „Notiz speichern“, Hinweis zum Sync) und „Letzte Mails“
 (Karte mit bis zu acht Mails, Betreff, Anfang, Datum; ein Klick öffnet die Mail im eigenen Fenster).
-
-**Zuschnitt.** Ersetzt den Kopf an Ort und Stelle, kein Fenster: Überschrift „Ausschnitt wählen“,
-Hinweis, ein Quadrat von 18 rem mit dem Bild, das der Helfer kodiert hat, und einer runden Maske
-(außen abgedunkelt mit `scrim`, Rand `surface-raised`), so wie der Avatar es zeigt. Das Quadrat
-bleibt, das Bild bewegt sich: ziehen mit der Maus, Pfeiltasten (Umschalt: viermal so weit), Plus
-und Minus zoomen, darunter Minus-Knopf, Zoom-Regler, Plus-Knopf; Eingabe speichert, Escape bricht
-ab. „Bild speichern“ (Hauptknopf) und „Abbrechen“. Fehler stehen an der Stelle („Das Bild konnte
-nicht verwendet werden.“ mit Grund aus `errors.codes`).
-
-**Bilder überall.** Der Avatar zeigt das Bild, wo heute Initialen stehen: Zeilen der Mailliste und
-der Konversationen, Kopf im Lesebereich, Chips der Empfänger im Composer (16 px, neu mit
-Mini-Avatar), Kontakte. Ohne Bild bleiben die Initialen auf der Tönung. Nie ein Bild aus dem Netz.
 
 **Als Spam markieren.** Sperrt sofort. Liegen Mails davon in Konten mit Schreibzugriff, fragt ein
 neutraler Dialog „Auch 3 vorhandene Mails in den Spam-Ordner verschieben?“ mit „In den
@@ -859,19 +859,18 @@ Tastaturfokus, kein Aktivieren der App beim Erscheinen; der erste Klick trifft d
 
 ```
 ┌──────────────────────────────────────────────┐
-│ (AV)  Bob Example                   15:04  × │
-│       Mittagessen morgen?                    │
-│       Hallo Alice, hast du morgen Zeit für …│
-│       … zweite Zeile des Ausschnitts         │
-│       ● In Arbeit                            │
-│       [Lesen] [Löschen]                      │
+│ Bob Example                         15:04  × │
+│ Mittagessen morgen?                          │
+│ Hallo Alice, hast du morgen Zeit für …       │
+│ … zweite Zeile des Ausschnitts               │
+│ ● In Arbeit                                  │
+│ [Lesen] [Löschen]                            │
 ├──────────────────────────────────────────────┤
 │ 2 weitere im Posteingang                     │
 └──────────────────────────────────────────────┘
 ```
 
-- Avatar 32 px wie in der Liste: das Bild des Kontakts (Stufe 17), sonst Initialen auf der Tönung
-  des Absenders; ohne Ring (die Kontozeile nennt das Konto).
+- Kein Bild und keine Initialen (Stufe 22, Entscheidung 0072): der Text beginnt am Rand der Karte.
 - Absender 14 px halbfett (Name, sonst Adresse, sonst „Unbekannter Absender“), Zeit 12 px
   `text-secondary` mit Tabellenziffern wie die Zeitspalte, daneben Schließen (×, 24 px).
 - Betreff 13 px mittel, eine Zeile; Ausschnitt 13 px `text-secondary`, höchstens zwei Zeilen,
@@ -882,7 +881,7 @@ Tastaturfokus, kein Aktivieren der App beim Erscheinen; der erste Klick trifft d
   unter Einstellungen → Konten erlauben.“), mit dem Knopf über `aria-describedby` verbunden.
 - Gelöscht: die Karte wird eine Zeile „Gelöscht · <Betreff>“ mit „Rückgängig“ (leiser Knopf) und
   Schließen und geht nach fünf Sekunden auf dem Bildschirm.
-- Verborgene Inhalte: Briefsymbol statt Avatar, „Neue Nachricht“, keine Zeile mit Betreff oder
+- Verborgene Inhalte: „Neue Nachricht“, keine Zeile mit Betreff oder
   Ausschnitt, nur „Lesen“; bei mehreren Konten das Konto.
 - Ein Fehler steht unter den Knöpfen in `danger` („Hat nicht geklappt: …“, `role="alert"`).
 
@@ -978,7 +977,7 @@ absteigend). Sortierbare Köpfe sind Knöpfe; Markiert und Anhang zeigen nur ihr
 
 | Spalte | Breite (Standard) | Inhalt |
 |---|---|---|
-| Auswahlkästchen | 16 px | ungelesen-Punkt, wird beim Überfahren zum Kästchen (die Tabelle hat keinen Avatar, an dessen Stelle es treten könnte; Stufe 21) |
+| Auswahlkästchen | 16 px | die Markenspalte jeder Zeile: ungelesen-Punkt, wird beim Überfahren zum Kästchen; nach dem Vorlauf der Zeile (16 px) wie in der Liste, der Kopf mit gleichem Platzhalter (Stufe 22) |
 | Markiert, Anhang | 32 px, fest | Fahne in `warning`, Büroklammer in `text-tertiary` |
 | Absender (Gesendet, Entwürfe: Empfänger) | 200 px | wie die Spalte Absender der Zeile, halbfett wenn ungelesen |
 | Empfänger | 200 px, aus | alle Empfänger, `text-secondary` |
@@ -1113,7 +1112,8 @@ Zeitwahlen (vorher teils 12 px, im Sortierknopf 4 px). 4 px nur in runden Chips 
 KI-Chips, Pille „n Antworten“) und kleinen Knöpfen mit 12-px-Text.
 
 **Kanten.** Was in einer Spalte untereinander steht, beginnt auf einer Linie: in der Liste der
-Titel der Ansicht, die Abschnitte („Heute“) und die Avatare (24 px, Vorlauf der Zeile); in der
+Titel der Ansicht, die Abschnitte („Heute“) und die Markenspalte der Zeilen (24 px, Vorlauf der
+Zeile; seit Stufe 22 statt der Avatare); in der
 Seitenspalte die Etiketten („Ansichten“) und die Symbole der Zeilen (20 px); in der Befehlspalette
 die Gruppen („Treffer“) und die Symbole; der Inhalt der Aktivität im Einzug des Kopfes (24 px).
 Ein leiser Knopf allein unter Text („← Alle Konten“, „Erneut prüfen“ beim Speicher) steht mit seinem

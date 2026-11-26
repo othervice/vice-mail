@@ -117,3 +117,9 @@ Alle Werte sind Tokens; eine andere Gewichtung (z. B. weniger Schatten) ist eine
 Die Farbwerte der Tabelle oben gelten seit Entscheidung 0053 nicht mehr: kühle Grautöne statt
 warmer, die Prioritätskarte kühl statt warm getönt, die achte Avatar-Tönung Schiefer statt Sand.
 Stufen, Schatten, Avatare und Kontrastziele bleiben wie hier beschrieben.
+
+## Nachtrag 26.11.2026
+
+Die Avatare mit Initialen, ihre acht Tönungen und der Kontoring sind seit Stufe 22 entfernt
+(Entscheidung 0072). Zeilen beginnen mit einer schmalen Markenspalte; das Konto zeigt in
+gemischten Listen sein Etikett mit Punkt und Name.

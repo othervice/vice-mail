@@ -21,7 +21,7 @@ account with us, no telemetry.
 - **Inbox:** conversations that unfold in the list, categories without AI, snooze, pins, tasks,
   reminders when nobody replies, flagged view, an attachments view across accounts, local rules;
   views in the sidebar you choose yourself.
-- **Contacts:** every address becomes a contact, with your own pictures, search and "mark as spam";
+- **Contacts:** every address becomes a contact, with notes, search and "mark as spam";
   contact groups for the composer, vCard import and export.
 - **Safe reading:** sanitised HTML in a sandbox, remote images blocked until allowed, tracking
   pixels counted and never loaded, tracking parameters removed from links, every link checked;

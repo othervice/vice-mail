@@ -112,7 +112,11 @@ A mismatch (a server that swaps headers, replays an old record under a newer ver
 it) or a failed authentication rejects the entry; it is reported, and the other entries sync as
 usual. Rejected entries never count as a version. Damaged and misplaced ones are deleted once a
 valid winner of their record is stored; entries of another key, of a newer app version
-(`format` > 1 or an unknown kind) or with malformed content stay on the server. An entry
+(`format` > 1 or an unknown kind) or with malformed content stay on the server. Entries of a
+retired kind (`RETIRED_KINDS` in `record.rs`: since stage 22, decision 0072, `contactPicture`)
+are ignored without being reported (they are no rejected entries for the status), never applied,
+never written and never deleted: devices with an older version may still use them. Like every
+entry that is not a record here they are downloaded again when the folder changes. An entry
 damaged under an unchanged header is only noticed by a device that downloads it: other
 devices, or a periodic full check on the writing device (`PassMode::FullCheck`). Entries listed
 too large to be a record are not downloaded at all and stay like those of another key (see "A
@@ -161,7 +165,7 @@ and `ui.unread_first` (the views that group unread mail on top) stay local.
 | `mailboxPref` | `<account uuid>/<decoded mailbox path>` | newer wins | applied | 1 KiB | `mailbox_pref` (stage 16, decision 0033) |
 | `blockedSender` | normalised address | newer wins | applied | 1 KiB | `blocked_sender` (stage 16, decision 0033) |
 | `attachmentPin` | `<account uuid>/<Message-ID>/<attachment index>` | newer wins | applied | 2 KiB | `attachment_pin` (stage 16, decision 0036) |
-| `contactPicture` | normalised address | newer wins | applied | 56 KiB | `contact_picture.image` (stage 17, decision 0050) |
+| ~~`contactPicture`~~ | normalised address | retired since stage 22 (decision 0072): ignored, never written | – | – | none (migration 0028 dropped `contact_picture` and its `sync_record` rows) |
 
 Mails are referred to by account UUID and Message-ID (without angle brackets), never by local
 ids or UIDs. A pinned attachment adds the attachment's index in the reading view as the last
@@ -188,7 +192,7 @@ that set "always as newsletter" for the same sender change the same record.
 | `blockedSender` | `{}` (that it exists is all) |
 | `attachmentPin` | `{pinnedAtMs, name, mimeType, size}`: the sanitised file name (not empty, no controls), the declared type and the size when it was pinned, so the list shows it without the body |
 | `contact` | `{userName?, mergedInto?, note?}`, at least one: the name the user gave, and for an address the user merged into another contact that contact's normalised address (stage 10), and the user's note (stage 17: at most 1,000 characters, no controls but line breaks and tabs). Applied when this device has the address (and the other one); until then the record waits in `sync_record` and applies when the address appears in the directory. Dismissed duplicate suggestions, counts, ranks, names seen in mail and the kind stay on the device |
-| `contactPicture` | `{jpeg}`: standard base64 of a JPEG of at most 40 KiB (stage 17, decision 0050), the 256 × 256 picture the user chose for the contact with this address. Applied at once (no contact row needed); shown only after this device's helper encoded it again (`contact_picture.display`, not synchronised); a refused one is never shown |
+| `contactPicture` | retired (decision 0072). Stage 17 to 21 wrote `{jpeg}`, standard base64 of a 256 × 256 JPEG of at most 40 KiB (decision 0050); this version reads no content of it |
 | `account` | per field `{version, value}`: `email`, `displayName`, `color`, `imap`, `smtp` |
 | `device` | `{name, system, lastSeenMs}` |
 | `savedView` | `{name, query, position}`: a saved search of the sidebar (stage 7, decision 0026), checked like a local save (name 1 to 100 characters, query 1 to 2048 bytes, both trimmed, no control characters). Names are unique per device only where they are typed; records from other devices are taken over even with a name in use. Recent searches stay on the device |

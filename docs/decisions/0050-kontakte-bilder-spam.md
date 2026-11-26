@@ -128,3 +128,10 @@
 - Windows: Dialog, Drop, Helfer-Modus und Anzeige sind geschrieben, dort aber nicht gelaufen.
 - Dauer der Migration 0020 bei 500.000 Mails nicht gemessen.
 - Antwort-an alter Mails ohne gespeicherten Mailtext wird nicht nachgetragen.
+
+## Nachtrag 26.11.2026
+
+Der Teil „Eigene Bilder“ und die Datenart `contactPicture` des Einstellungs-Syncs sind seit Stufe 22
+entfernt (Entscheidung 0072): Migration 0028 löscht die gespeicherten Bilder, Einträge älterer
+Geräte im Sync-Ordner werden still ignoriert, vCard-Fotos übersprungen. Kontakte, Notizen und
+„Als Spam markieren“ bleiben wie hier beschrieben.
