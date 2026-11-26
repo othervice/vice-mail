@@ -26,7 +26,7 @@ import { Button } from "../../components/Button";
 import { cx } from "../../components/cx";
 import type { CoreError } from "../../services/ipc";
 import { cleanPaste, type PasteOutcome } from "./paste";
-import { createInlineImage, IMAGE_SIZES, imageSizeOf, type ImageSize, type ImageSources } from "./inlineImage";
+import { createInlineImage, IMAGE_SIZES, imageSizeOf, savedInlineImage, type ImageSize, type ImageSources } from "./inlineImage";
 import { TextAlign, type Alignment } from "./textAlign";
 import "./composer.css";
 
@@ -40,14 +40,17 @@ export interface RichEditorHandle {
 }
 
 /**
- * The editor's HTML, built in an inert document. TipTap's `getHTML` builds the nodes in the page's
- * own document first, where an inline image's `<img src="cid:…">` starts a load that the CSP
- * refuses and reports (stage 23, found by the desktop test of dropped images).
+ * The editor's HTML, built in an inert document, with inline images as `src="cid:…"`. TipTap's
+ * `getHTML` builds the nodes in the page's own document first, where an `<img src="cid:…">` starts
+ * a load that the CSP refuses and reports (stage 23, found by the desktop test of dropped images);
+ * so the schema draws inline images with `data-cid` and only this serializer writes `src`.
  */
 function editorHtml(editor: Editor): string {
   const inert = document.implementation.createHTMLDocument();
   const container = inert.createElement("div");
-  container.append(DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content, { document: inert }));
+  const base = DOMSerializer.fromSchema(editor.schema);
+  const serializer = new DOMSerializer({ ...base.nodes, inlineImage: savedInlineImage }, base.marks);
+  container.append(serializer.serializeFragment(editor.state.doc.content, { document: inert }));
   return container.innerHTML;
 }
 

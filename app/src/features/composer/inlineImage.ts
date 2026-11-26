@@ -1,3 +1,4 @@
+import type { DOMOutputSpec, Node as ModelNode } from "@tiptap/pm/model";
 import { mergeAttributes, Node } from "@tiptap/react";
 
 /** `cid:<contentId>` → `data:` URL, only for showing an image in the editor. */
@@ -25,6 +26,22 @@ function parseWidth(element: HTMLElement): number | null {
 
 const CID = /^cid:(.+)$/;
 
+/** Stage 23: an inline image as the saved HTML has it: `<img src="cid:…" alt="…" width="…">`. */
+export function savedInlineImage(node: ModelNode): DOMOutputSpec {
+  const attrs: Record<string, unknown> = node.attrs;
+  const src = attrs["src"];
+  const alt = attrs["alt"];
+  const width = attrs["width"];
+  return [
+    "img",
+    {
+      src: typeof src === "string" ? src : "",
+      alt: typeof alt === "string" ? alt : "",
+      ...(typeof width === "number" ? { width: String(width) } : {}),
+    },
+  ];
+}
+
 /**
  * Inline images of a draft or signature: `<img src="cid:…" alt="" width="…">` in the editor
  * model and in the saved HTML. A node view shows the image from its `data:` URL (from
@@ -48,7 +65,13 @@ export function createInlineImage() {
     draggable: true,
     selectable: true,
     addAttributes: () => ({
-      src: { default: null },
+      // Stage 23: rendered into the page (ProseMirror's own drawing, e.g. while the editor
+      // closes) as `data-cid`, never as `src`: an `<img src="cid:…">` in the page's document
+      // starts a load that the CSP refuses and reports. The saved HTML has `src` (`savedInlineImage`).
+      src: {
+        default: null,
+        renderHTML: (attributes: Record<string, unknown>) => ({ "data-cid": typeof attributes["src"] === "string" ? attributes["src"] : "" }),
+      },
       alt: { default: "" },
       width: {
         default: null,

@@ -260,6 +260,13 @@ describe("composer: inline images", () => {
     await waitFor(() => {
       expect(editor.querySelector('img[data-content-id="drop0@vicemail.test"]')).not.toBeNull();
     });
+    // Closing the composer saves (the HTML has `src="cid:…"`), and ProseMirror draws the text
+    // once more without the node views.
+    await user.click(screen.getByTestId("composer-close"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("composer")).toBeNull();
+    });
+    expect(saves(core).at(-1)?.bodyHtml ?? "").toContain('<img src="cid:drop0@vicemail.test" alt="">');
     setAttribute.mockRestore();
     expect(cidInPage).toEqual([]);
   });
