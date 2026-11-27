@@ -5,7 +5,7 @@
 **Anlass:** Test von 0.1.3 am 26.11.2026. Wie in Stufe 21 und 22: erst alle Rückmeldungen
 sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist.
 
-**Stand:** Sammeln (seit 26.11.2026). Noch nichts umgesetzt.
+**Stand:** Fertig am 27.11.2026, ergibt 0.1.4.
 
 ## Rückmeldungen
 
@@ -91,4 +91,40 @@ sammeln, gebaut wird erst, wenn der Mensch sagt, dass die Liste vollständig ist
 
 ## Ergebnis
 
-Noch offen; die Liste wird gesammelt.
+Erledigt am 26./27.11.2026, ergibt 0.1.4. Entscheidungen 0082 (Ziehen ohne Drop-Handler der
+Shell), 0083 (neues Erscheinungsbild: Inter, Farben, Größen), 0084 (Werkzeugleiste, Liste,
+Lesebereich, Kontaktspalte), 0085 (Seitenleiste nach Konten), 0086 (neue Mail als schwebende
+Karte), 0087 („Alle Konten“ über alle Konten). Keine Migration; neue Einstellungen auf dem Gerät:
+`ui.sidebar_folds`, `contactPanel` im Fensterlayout. Neue Schrift: Inter 4.1 (OFL, mitgeliefert).
+
+- **1:** Tauris Drop-Handler ist für alle Fenster aus. Dateien aus Finder und Explorer kommen als
+  Inhalt über Upload-Befehle in den Kern (in Stücken zu 2 MiB, gleiche Grenzen wie die
+  Dateiauswahl); die Seite kann keinen Pfad mehr nennen, `DropRegistry` ist weg. Konten in Spalte
+  und schmaler Leiste per Ziehen umsortieren wie bei Thunderbird (Linie, gedimmt, Esc,
+  Alt+Pfeil). Mails auf Ordner ziehen geht wieder. Nebenbei: Ziehen im Editor und eine
+  CSP-Meldung durch `cid:`-Bilder behoben.
+- **2:** In vier Schritten nach dem freigegebenen Entwurf umgesetzt und danach zusammengeführt:
+  Grundlage (Schrift, Farben, Größen), Seitenleiste, Werkzeugleiste mit Liste, Lesebereich und
+  Kontaktspalte, neue Mail als Karte. Beim Zusammenführen: Karte unter der neuen Werkzeugleiste,
+  Kontaktspalte weicht beim Schreiben; Später, Markiert und Gesendet unter „Alle Konten“ über alle
+  Konten (neue Befehle `listUnifiedSent`/`listUnifiedSentThreads`, 2,17 ms bei 100.000 Mails im
+  Debug-Build). Kontrast: alle Farbpaare in 12 Themen bestehen, auch auf Mica.
+
+**Geprüft:**
+- `scripts/check.sh` grün auf dem zusammengeführten Stand (1.673 Rust-Tests, 6.277 Vitest),
+  einschließlich Clippy für Windows.
+- Server-Tests gegen den lokalen Testserver: 1.790 grün.
+- Desktop: 45 Spec-Dateien; im letzten Gesamtlauf 44 grün, `background.e2e.mjs` scheiterte an
+  einer Pause über Mitternacht („bis morgen, 0:06“), Muster erweitert, einzeln 8/8 grün.
+- README-Bilder neu. Bildschirmfotos aller Schritte mit dem Entwurf verglichen; der Mensch fand
+  das Ergebnis „super“.
+
+**Ungeprüft:**
+- Echtes Ziehen mit der Maus (macOS lässt synthetische Mausereignisse ohne Bedienungshilfen-
+  Freigabe nicht zu; die Tests lösen die Ereignisse in der Seite aus).
+- Alles auf Windows: Werkzeugleiste unter Mica, Schrift in WebView2, Ziehen, Seitenleiste
+  (Prüfliste 23.1–23.4, 24.1–24.2).
+- Geschwindigkeit im Release-Build.
+
+**Wartet auf:** Test von 0.1.4 auf Mac und Windows, besonders Ziehen (Konten, Mails, Dateien) und
+das neue Erscheinungsbild unter Windows.

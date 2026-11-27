@@ -40,7 +40,7 @@ Im Projektordner eine neue Sitzung öffnen und schreiben:
 | 20 | [Erinnern, Anhänge, Tracker, Speicher](stages/20-erinnern-anhaenge-tracker-speicher.md) | fertig (0.1.1) | Anhang-Erinnerung, Erinnern ohne Antwort, Anhänge-Ansicht, Tracker-Schutz sichtbar, Postfach-Speicher |
 | 21 | [Rückmeldungen zu 0.1.1](stages/21-rueckmeldungen-0-1-1.md) | fertig (0.1.2), Punkt 1 wartet auf den Menschen | Rückmeldungen aus dem Test von 0.1.1; ergibt 0.1.2 |
 | 22 | [Rückmeldungen zu 0.1.2](stages/22-rueckmeldungen-0-1-2.md) | fertig (0.1.3) | Konten verschieben und umbenennen, keine Bilder/Initialen, ein Schlüsselbund-Eintrag, Kontakte in der Suche, Spamfilter, Suche im Wort, Einstellungen durchsuchen, Windows-11-Optik, Passwörter übernehmen; ergibt 0.1.3 |
-| 23 | [Rückmeldungen zu 0.1.3 und neues Erscheinungsbild](stages/23-rueckmeldungen-0-1-3.md) | sammelt | Ziehen und Ablegen auf Mac und Windows, Konten wie bei Thunderbird umsortieren, Erscheinungsbild Richtung Mailbird/Canary (Entwurf zur Freigabe) |
+| 23 | [Rückmeldungen zu 0.1.3 und neues Erscheinungsbild](stages/23-rueckmeldungen-0-1-3.md) | fertig (0.1.4) | Ziehen und Ablegen auf Mac und Windows, Konten wie bei Thunderbird umsortieren, neues Erscheinungsbild nach Mailbird/Canary |
 | 15 | [Veröffentlichung](stages/15-veroeffentlichung.md) | wartet auf Mensch (alles ohne Veröffentlichung fertig) | öffentliches Repo, signierte Builds, Updates |
 
 Status: `offen`, `in Arbeit`, `wartet auf Mensch`, `fertig`.
@@ -109,6 +109,18 @@ Gilt, wenn der Auftrag lautet, die Stufen nacheinander ohne Begleitung abzuarbei
 - Jede Stufe endet mit grünem `scripts/check.sh` und einem Push.
 
 ## Letzter Lauf
+
+**Lauf vom 26./27.11.2026 (Version 0.1.4).** Rückmeldungen zu 0.1.3 (Stufe 23): Ziehen ging
+auf keinem Gerät (Ursache in Tauris Drop-Handler), und der Mensch wünschte ein hochwertigeres
+Erscheinungsbild nach Mailbird und Canary. Entwurf als Zeichenfläche
+(https://claude.ai/artifact/BuSPYpDvmSDm4s1JJoSZFX), freigegeben, in vier Schritten umgesetzt und
+zusammengeführt. Gesamtprüfung: `check.sh` grün (1.673 Rust, 6.277 Vitest), Server-Tests 1.790,
+Desktop 44/45 im Gesamtlauf (Rest einzeln grün). 0.1.4 als GitHub-Release „Latest“ und im Gitea.
+
+**Wartet auf den Menschen (neu):** Update auf 0.1.4 über die App; Ziehen mit der echten Maus auf
+Mac und Windows; neues Erscheinungsbild unter Windows (Prüfliste 23.x und 24.x).
+
+### Lauf vom 26.11.2026 (0.1.3)
 
 **Lauf vom 26.11.2026 (Version 0.1.3).** Der Mensch testete 0.1.2 und sammelte Rückmeldungen
 und Ideen (Stufe 22: Konten verschieben und umbenennen, keine Bilder, ein Schlüsselbund-Eintrag,
