@@ -7,6 +7,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-27
+
+### Changed
+
+- A new look. The app uses the Inter typeface on macOS and Windows (shipped with the app, never
+  downloaded), with new light and dark colours. Mail you read or write keeps your system's font.
+- One toolbar across the window (the title bar on macOS): the folder's title, unread count and
+  list controls over the list, the open message's actions as button groups over the reading
+  pane, and search. The quick filter opens from its toolbar button.
+- New sidebar: "All accounts" with the unified inbox, Later, Flagged and Sent, and every other
+  view, the account groups, saved searches, Activity and the outbox under "More"; favourites with
+  icons in their account's colour; one section per account with its inbox, Sent and "More
+  folders". Its foot shows when your accounts last synced, or which one is offline, with "Sync
+  now" and Settings.
+- "All accounts" really covers all accounts: Later, Flagged, Sent and the views under "More" show
+  every account's mail in one list, each row handled with its own account.
+- Message list: separator lines, the selected message filled in the accent colour while the list
+  has the focus, date bands, and a colour stripe per account in lists that mix accounts.
+- Reading pane without a card: account and folder above a large subject, the conversation's other
+  messages as one-line rows, attachments as cards coloured by file type, and the quick reply as a
+  field at the bottom.
+- New mail opens as a floating card under the toolbar over the reading pane, while the list stays
+  usable. The subject is the card's title, recipients and the sender are chips, the quote is
+  folded behind "Show quote", and the card can be minimised to a bar. A compact formatting bar
+  with everything else under "More formatting"; "Send" has an arrow with send later and "Send and
+  archive"; attach, image, template and "Remind me if no reply" are icons beside it; signature,
+  quote, archive the original, read receipt and plain text are under "…".
+- The narrow rail is grouped like the sidebar and shows each account's unread count under its
+  dot.
+- Files dragged from the Finder or the Explorer onto a new mail or the signature editor are read
+  from their contents, not their path. Dropping a file anywhere else does nothing.
+
+### Added
+
+- A contact panel on the right, where the window has room, toggled from the toolbar: name,
+  address, write mail, all mail, note, recent mail and groups, from your contacts on this
+  computer. It steps aside while you write.
+- Accounts are reordered as in Thunderbird: a line shows where the account will go, the dragged
+  account is dimmed, and Escape cancels; in the sidebar and with the account dots of the narrow
+  rail (there also with Alt+Up and Alt+Down).
+- "Edit views…" has a line for "More": views above it show under "All accounts", views below it
+  under "More".
+- The sidebar remembers which sections, accounts, "More" and "More folders" are open, also after a
+  restart (on this device).
+
+### Fixed
+
+- Dragging inside the app works on macOS and Windows again: accounts can be reordered and mail can
+  be dragged onto folders; holding Option (macOS) or Ctrl (Windows) copies.
+- Text and images can be moved by dragging inside the editor.
+
 ## [0.1.3] - 2026-11-26
 
 ### Added
@@ -361,7 +412,8 @@ were never published. How each part was built and tested is recorded per stage i
 - Not planned for version 1: PGP and S/MIME, calendar and contact sync, POP3, encryption of the
   local database (use FileVault or BitLocker).
 
-[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/othervice/vice-mail/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/othervice/vice-mail/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/othervice/vice-mail/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/othervice/vice-mail/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/othervice/vice-mail/compare/v0.1.0...v0.1.1
