@@ -119,6 +119,13 @@ Karte), 0087 („Alle Konten“ über alle Konten). Keine Migration; neue Einste
 - README-Bilder neu. Bildschirmfotos aller Schritte mit dem Entwurf verglichen; der Mensch fand
   das Ergebnis „super“.
 
+- GitHub-CI auf `c4a131d` (Version 0.1.4) grün auf macOS und Windows. Auf `1c0b7a8` scheiterte unter
+  Windows einmal `action_tests::an_action_on_many_messages_is_a_few_events` (Zeitüberschreitung
+  beim Warten auf die Bestätigungen, Stufe 23 hat ihn nicht berührt); im nächsten Lauf grün.
+- Release 0.1.4 aus `24f7e8e`: Update-Signaturen geprüft, NSIS-Prüfsumme stimmt, App aus dem
+  Disk-Image startet als 0.1.4; GitHub-Release „Latest“ ohne Anmeldung geprüft (Manifest 0.1.4,
+  Prüfsummen, Signaturen), Gitea-Release als Sicherung.
+
 **Ungeprüft:**
 - Echtes Ziehen mit der Maus (macOS lässt synthetische Mausereignisse ohne Bedienungshilfen-
   Freigabe nicht zu; die Tests lösen die Ereignisse in der Seite aus).
